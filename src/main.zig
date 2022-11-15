@@ -4,15 +4,29 @@ const sdl = @cImport({
     @cInclude("SDL2/SDL_ttf.h");
 });
 
-const SCREEN_WIDTH = 640;
-const SCREEN_HEIGHT = 480;
+const buildOptions = @import("build_options");
+const contentDir = buildOptions.content_dir;
 
 const AppError = error{
     SdlInitError,
     NotImplementedError,
+    SdlError,
+    ResourceError,
 };
 
+fn checkInt(i: c_int) !void {
+    if (i < 0) {
+        return AppError.SdlInitError;
+    }
+}
+
+fn checkNotNull(comptime T: type, ptr: ?*T) !*T {
+    return ptr orelse AppError.SdlInitError;
+}
+
 pub fn main() !void {
+    std.log.info("Starting application, contentDir={s}", .{contentDir});
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer {
@@ -21,34 +35,43 @@ pub fn main() !void {
     }
 
 
-    if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) < 0) {
-        return AppError.SdlInitError;
-    }
+    try checkInt(sdl.SDL_Init(sdl.SDL_INIT_VIDEO));
     defer {
         sdl.SDL_Quit();
         std.log.info("application done, exiting", .{});
     }
 
-    const window = sdl.SDL_CreateWindow("ZTD", sdl.SDL_WINDOWPOS_UNDEFINED, sdl.SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, sdl.SDL_WINDOW_SHOWN);
+    var displayMode: sdl.SDL_DisplayMode = undefined;
+    try checkInt(sdl.SDL_GetCurrentDisplayMode(0, &displayMode));
+    
+    const window = sdl.SDL_CreateWindow("ZTD", sdl.SDL_WINDOWPOS_UNDEFINED, sdl.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.SDL_WINDOW_SHOWN);
     if (window == null) {
         return AppError.SdlInitError;
     }
     defer sdl.SDL_DestroyWindow(window);
+    try checkInt(sdl.SDL_SetWindowFullscreen(window, sdl.SDL_WINDOW_FULLSCREEN));
+
+
+    try checkInt(sdl.TTF_Init());
+    defer sdl.TTF_Quit();
 
     const font = sdl.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 28);
     if (font == null) {
-        return AppError.SdlInitError;
+        return AppError.ResourceError;
     }
+    defer sdl.TTF_CloseFont(font);
 
     var renderer = sdl.SDL_CreateRenderer(window, 0, sdl.SDL_RENDERER_PRESENTVSYNC);
     defer sdl.SDL_DestroyRenderer(renderer);
 
-    // const surface = sdl.SDL_GetWindowSurface(window);
-    // _ = sdl.SDL_FillRect(surface, null, sdl.SDL_MapRGB(surface.*.format, 0xff, 0xff, 0xff));
-    // _ = sdl.SDL_UpdateWindowSurface(window);
-
     const startTicks = sdl.SDL_GetTicks();
+    var lastFrameTicks = startTicks;
+
     mainloop: while (true) {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+        const frameAllocator = arena.allocator();
+
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
@@ -63,8 +86,9 @@ pub fn main() !void {
                 },
                 else => {},
             }
-        }
-        const t = 0.001 * @intToFloat(f32, sdl.SDL_GetTicks() - startTicks);
+        }        
+        const frameTicks = sdl.SDL_GetTicks();
+        const t = 0.001 * @intToFloat(f32, frameTicks - startTicks);
 
 
         _ = sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
@@ -86,11 +110,25 @@ pub fn main() !void {
         _ = sdl.SDL_SetRenderDrawColor(renderer, 0, 0, 0xff, 0xff);
         _ = sdl.SDL_RenderFillRect(renderer, &rect);
 
-        var text = try std.fmt.allocPrintZ(allocator, "Current time: {}", .{t});
+        var text = try std.fmt.allocPrintZ(frameAllocator, "FPS: {}", .{1000 / (frameTicks - lastFrameTicks)});
         const tt: [*:0]const u8 = text;
         const textSurface = sdl.TTF_RenderText_Solid(font, tt, .{.r = 0, .g = 0, .b = 255, .a = 255});
-        _ = textSurface;
+        defer sdl.SDL_FreeSurface(textSurface);
+
+        const texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(renderer, textSurface));
+        defer sdl.SDL_DestroyTexture(texture);
+
+        const srcRect: sdl.SDL_Rect = .{
+            .x = 0, .y = 0, .w = textSurface.*.w, .h = textSurface.*.h,
+        };
+        const dstRect: sdl.SDL_Rect = .{
+            .x = 0, .y = 0, .w = textSurface.*.w, .h = textSurface.*.h,
+        };
+
+        try checkInt(sdl.SDL_RenderCopy(renderer, texture, &srcRect, &dstRect));
 
         sdl.SDL_RenderPresent(renderer);
+
+        lastFrameTicks = frameTicks;
     }
 }

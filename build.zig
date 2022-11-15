@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
@@ -10,7 +9,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.setBuildMode(mode);
 
     {
-        // setu psdl2
+        // setup sdl2
         exe.addIncludePath("/usr/include");
         exe.addIncludePath("/usr/include/x86_64-linux-gnu");
         exe.linkSystemLibrary("sdl2");
@@ -18,6 +17,21 @@ pub fn build(b: *std.build.Builder) void {
         exe.linkLibC();
     }
 
+    {
+        const options = b.addOptions();
+        exe.addOptions("build_options", options);
+        options.addOption([]const u8, "content_dir", "res/");
+    }
+
+    {
+        // install content
+        const installStep = b.addInstallDirectory(.{
+            .source_dir = "res",
+            .install_dir = .{ .custom = "" },
+            .install_subdir = "bin/res",
+        });
+        exe.step.dependOn(&installStep.step);
+    }
     exe.install();
 
     const run_cmd = exe.run();
