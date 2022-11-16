@@ -14,6 +14,7 @@ pub fn build(b: *std.build.Builder) void {
         exe.addIncludePath("/usr/include/x86_64-linux-gnu");
         exe.linkSystemLibrary("sdl2");
         exe.linkSystemLibrary("sdl2_ttf");
+        exe.linkSystemLibrary("sdl2_image");
         exe.linkLibC();
     }
 

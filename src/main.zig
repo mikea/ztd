@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl = @cImport({
     @cInclude("SDL2/SDL.h");
+    @cInclude("SDL2/SDL_image.h");
     @cInclude("SDL2/SDL_ttf.h");
 });
 
@@ -69,10 +70,6 @@ const Vec2 = struct {
     }
 };
 
-const FieldObject = struct {
-    pos: Vec2,
-};
-
 const Rect = struct {
     a: Vec2,
     b: Vec2,
@@ -113,6 +110,10 @@ const Rect = struct {
 
     fn height(self: *const Rect) f32 {
         return self.b.y - self.a.y;
+    }
+
+    fn contains(self: *const Rect, v: Vec2) bool {
+        return v.x >= self.a.x and v.x <= self.b.x and v.y >= self.a.y and v.y <= self.b.y;
     }
 
     pub fn format(
@@ -169,6 +170,52 @@ fn Table(comptime T: type) type {
     };
 }
 
+const SpriteSheet = struct {
+    surface: *sdl.SDL_Surface,
+    texture: *sdl.SDL_Texture,
+    w: u16,
+    h: u16,
+
+    fn load(renderer: *sdl.SDL_Renderer, file: [*:0]const u8, w: u16, h: u16) !SpriteSheet {
+        const surface = try checkNotNull(sdl.SDL_Surface, sdl.IMG_Load(file));
+        const texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(renderer, surface));
+
+        return .{ .surface = surface, .texture = texture, .w = w, .h = h };
+    }
+
+    fn deinit(self: *@This()) void {
+        sdl.SDL_DestroyTexture(self.texture);
+        sdl.SDL_FreeSurface(self.surface);
+    }
+
+    const Coords = struct {
+        x: u16,
+        y: u16,
+    };
+};
+
+const Resources = struct {
+    redDemon: SpriteSheet,
+
+    fn init(renderer: *sdl.SDL_Renderer) !Resources {
+        return .{
+            .redDemon = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16),
+        };
+    }
+
+    fn deinit(_: *@This()) void {}
+};
+
+const FieldObject = struct {
+    pos: Vec2,
+    size: Vec2,
+    sheet: *SpriteSheet,
+    sprites: []const SpriteSheet.Coords,
+    animationDelay: u32,
+    i: usize = 0,
+    lastFrame: u64 = 0,
+};
+
 const Game = struct {
     const FieldObjects = Table(FieldObject);
 
@@ -177,29 +224,39 @@ const Game = struct {
     lastTicks: u32 = 0,
 
     view: Rect = undefined,
+    resources: Resources = undefined,
     objects: FieldObjects = undefined,
 
-    fn init(self: *Game, allocator: std.mem.Allocator) !void {
+    fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !void {
         self.objects = FieldObjects.init(allocator);
+        self.resources = try Resources.init(renderer);
 
         // initially 1000 wide, centered on origin
         const w = 1000;
         const h = w * self.displaySize.y / self.displaySize.x;
         self.view = .{ .a = .{ .x = -w / 2, .y = -h / 2 }, .b = .{ .x = w / 2, .y = h / 2 } };
 
-        const grid = 100;
+        const grid = 200;
         const step = 20;
 
         var i: i32 = -grid + 1;
         while (i < grid) : (i += 1) {
             var j: i32 = -grid + 1;
             while (j < grid) : (j += 1) {
-                try self.objects.add(.{ .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step } });
+                if (i < 5 and i > -5 and j < 5 and j > -5) {
+                    continue;
+                }
+                try self.objects.add(.{ .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step }, .size = .{ .x = 8, .y = 8 }, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
+                    .{ .x = 2, .y = 0 },
+                    .{ .x = 3, .y = 0 },
+                    .{ .x = 4, .y = 0 },
+                }, .animationDelay = 200 });
             }
         }
     }
 
     fn deinit(self: *Game) void {
+        self.resources.deinit();
         self.objects.deinit();
     }
 
@@ -209,14 +266,14 @@ const Game = struct {
 
         switch (evt.type) {
             sdl.SDL_KEYDOWN => switch (evt.key.keysym.sym) {
-                sdl.SDLK_UP => self.view = self.view.translate(.{.x=0, .y=-delta}),
-                sdl.SDLK_DOWN => self.view = self.view.translate(.{.x=0, .y=delta}),
-                sdl.SDLK_LEFT => self.view = self.view.translate(.{.x=-delta, .y=0}),
-                sdl.SDLK_RIGHT => self.view = self.view.translate(.{.x=delta, .y=0}),
+                sdl.SDLK_UP => self.view = self.view.translate(.{ .x = 0, .y = -delta }),
+                sdl.SDLK_DOWN => self.view = self.view.translate(.{ .x = 0, .y = delta }),
+                sdl.SDLK_LEFT => self.view = self.view.translate(.{ .x = -delta, .y = 0 }),
+                sdl.SDLK_RIGHT => self.view = self.view.translate(.{ .x = delta, .y = 0 }),
                 else => {},
             },
             sdl.SDL_MOUSEWHEEL => {
-                const z: f32 = if (evt.wheel.y > 0) zoom else 1.0/zoom;
+                const z: f32 = if (evt.wheel.y > 0) zoom else 1.0 / zoom;
                 self.view = Rect.centered(self.view.center(), self.view.size().mul(z));
             },
             else => {},
@@ -229,7 +286,7 @@ const Game = struct {
             return;
         }
 
-        // const t = 0.001 * @intToFloat(f32, frameTicks - startTicks);
+        // const t = 0.001 * @intToFloat(f32, ticks - startTicks);
         const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
 
         {
@@ -238,10 +295,14 @@ const Game = struct {
             // update state
             var it = self.objects.iterator();
             while (it.next()) |o| {
+                if (ticks - o.lastFrame > o.animationDelay) {
+                    o.i = (o.i + 1) % o.sprites.len;
+                    o.lastFrame = ticks;
+                }
                 const d = Vec2.minus(c, o.pos);
                 const n = d.norm();
                 if (n > 1.0e-2) {
-                    const dn = d.mul(100 * dt / n);
+                    const dn = d.mul(20 * dt / n);
                     o.pos = o.pos.add(dn);
                 }
             }
@@ -269,20 +330,35 @@ const Game = struct {
         // draw objects
         var it = self.objects.iterator();
         while (it.next()) |o| {
-            const rect = Rect.centered(.{ .x = o.pos.x, .y = -o.pos.y }, .{ .x = 2, .y = 2 });
+            const rect = Rect.centered(o.pos, o.size);
             if (self.view.intersects(rect)) {
-                const newA = rect.a.add(translation).mul(scale);
-                const newSize = rect.size().mul(scale);
+                const pos = o.pos.add(translation).mul(scale);
+                const size = o.size.mul(scale);
+                // const newSize = rect.size().mul(scale);
 
                 // std.log.info("pos: {} rect: {} newA: {} newSize: {}", .{ o.pos, rect, newA, newSize });
 
-                const sdlRect = sdl.SDL_Rect{
-                    .x = @floatToInt(i32, newA.x),
-                    .y = @floatToInt(i32, newA.y),
-                    .w = @floatToInt(i32, newSize.x),
-                    .h = @floatToInt(i32, newSize.y),
+                // const sdlRect = sdl.SDL_Rect{
+                //     .x = @floatToInt(i32, newA.x),
+                //     .y = @floatToInt(i32, newA.y),
+                //     .w = @floatToInt(i32, newSize.x),
+                //     .h = @floatToInt(i32, newSize.y),
+                // };
+                // try checkInt(sdl.SDL_RenderFillRect(renderer, &sdlRect));
+                const srcRect = sdl.SDL_Rect{
+                    .x = o.sprites[o.i].x * o.sheet.w,
+                    .y = o.sprites[o.i].y * o.sheet.h,
+                    .w = o.sheet.w,
+                    .h = o.sheet.h,
                 };
-                try checkInt(sdl.SDL_RenderFillRect(renderer, &sdlRect));
+                const destRect = sdl.SDL_Rect{
+                    .x = @floatToInt(i32, pos.x - size.x / 2),
+                    .y = @floatToInt(i32, pos.y - size.y / 2),
+                    .w = @floatToInt(i32, size.x),
+                    .h = @floatToInt(i32, size.y),
+                };
+
+                try checkInt(sdl.SDL_RenderCopy(renderer, o.sheet.texture, &srcRect, &destRect));
             }
         }
     }
@@ -329,7 +405,7 @@ pub fn main() !void {
     var game: Game = .{
         .displaySize = .{ .x = @intToFloat(f32, displayMode.w), .y = @intToFloat(f32, displayMode.h) },
     };
-    try game.init(allocator);
+    try game.init(allocator, renderer);
     defer game.deinit();
 
     // main loop
