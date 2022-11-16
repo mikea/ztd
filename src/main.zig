@@ -239,6 +239,7 @@ const Game = struct {
         const grid = 200;
         const step = 20;
 
+        var k: usize = 0;
         var i: i32 = -grid + 1;
         while (i < grid) : (i += 1) {
             var j: i32 = -grid + 1;
@@ -250,7 +251,9 @@ const Game = struct {
                     .{ .x = 2, .y = 0 },
                     .{ .x = 3, .y = 0 },
                     .{ .x = 4, .y = 0 },
-                }, .animationDelay = 200 });
+                    .{ .x = 3, .y = 0 },
+                }, .animationDelay = 200, .i = k % 4 });
+                k += 1;
             }
         }
     }
