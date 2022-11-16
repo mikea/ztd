@@ -107,6 +107,14 @@ const Rect = struct {
         return self.a.add(self.size().mul(1.0 / 2.0));
     }
 
+    fn translate(self: *const Rect, v: Vec2) Rect {
+        return .{ .a = self.a.add(v), .b = self.b.add(v) };
+    }
+
+    fn height(self: *const Rect) f32 {
+        return self.b.y - self.a.y;
+    }
+
     pub fn format(
         self: Rect,
         comptime fmt: []const u8,
@@ -193,6 +201,26 @@ const Game = struct {
 
     fn deinit(self: *Game) void {
         self.objects.deinit();
+    }
+
+    fn event(self: *Game, evt: *const sdl.SDL_Event) void {
+        const delta = self.view.height() / 10.0;
+        const zoom = 1.1;
+
+        switch (evt.type) {
+            sdl.SDL_KEYDOWN => switch (evt.key.keysym.sym) {
+                sdl.SDLK_UP => self.view = self.view.translate(.{.x=0, .y=-delta}),
+                sdl.SDLK_DOWN => self.view = self.view.translate(.{.x=0, .y=delta}),
+                sdl.SDLK_LEFT => self.view = self.view.translate(.{.x=-delta, .y=0}),
+                sdl.SDLK_RIGHT => self.view = self.view.translate(.{.x=delta, .y=0}),
+                else => {},
+            },
+            sdl.SDL_MOUSEWHEEL => {
+                const z: f32 = if (evt.wheel.y > 0) zoom else 1.0/zoom;
+                self.view = Rect.centered(self.view.center(), self.view.size().mul(z));
+            },
+            else => {},
+        }
     }
 
     fn update(self: *Game, ticks: u32) void {
@@ -320,13 +348,9 @@ pub fn main() !void {
                 sdl.SDL_QUIT => break :mainloop,
                 sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
                     sdl.SDLK_ESCAPE => break :mainloop,
-                    sdl.SDLK_UP => std.log.debug("up", .{}),
-                    sdl.SDLK_DOWN => std.log.debug("down", .{}),
-                    sdl.SDLK_LEFT => std.log.debug("left", .{}),
-                    sdl.SDLK_RIGHT => std.log.debug("right", .{}),
-                    else => {},
+                    else => game.event(&event),
                 },
-                else => {},
+                else => game.event(&event),
             }
         }
         const frameTicks = sdl.SDL_GetTicks();
