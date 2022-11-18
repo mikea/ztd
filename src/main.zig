@@ -4,8 +4,12 @@ const sdl = @cImport({
     @cInclude("SDL2/SDL_image.h");
     @cInclude("SDL2/SDL_ttf.h");
 });
-
+const table = @import("table.zig");
 const buildOptions = @import("build_options");
+
+const Table = table.Table;
+const Id = table.Id;
+
 const contentDir = buildOptions.content_dir;
 
 const AppError = error{
@@ -132,43 +136,7 @@ const Rect = struct {
     }
 };
 
-fn Table(comptime T: type) type {
-    return struct {
-        const List = std.ArrayList(T);
-
-        pub const Iterator = struct {
-            l: *List,
-            i: u64,
-
-            fn next(self: *@This()) ?*T {
-                if (self.i >= self.l.*.items.len) {
-                    return null;
-                }
-                const result = &self.l.*.items[self.i];
-                self.i += 1;
-                return result;
-            }
-        };
-
-        list: List = undefined,
-
-        fn init(allocator: std.mem.Allocator) @This() {
-            return .{ .list = List.init(allocator) };
-        }
-
-        fn deinit(self: *@This()) void {
-            self.list.deinit();
-        }
-
-        fn add(self: *@This(), t: T) !void {
-            try self.list.append(t);
-        }
-
-        pub fn iterator(self: *@This()) Iterator {
-            return .{ .l = &self.list, .i = 0 };
-        }
-    };
-}
+// -- table and things
 
 const SpriteSheet = struct {
     surface: *sdl.SDL_Surface,
@@ -196,14 +164,19 @@ const SpriteSheet = struct {
 
 const Resources = struct {
     redDemon: SpriteSheet,
+    tower: SpriteSheet,
 
     fn init(renderer: *sdl.SDL_Renderer) !Resources {
         return .{
             .redDemon = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16),
+            .tower = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16),
         };
     }
 
-    fn deinit(_: *@This()) void {}
+    fn deinit(self: *@This()) void {
+        self.redDemon.deinit();
+        self.tower.deinit();
+    }
 };
 
 const FieldObject = struct {
@@ -216,19 +189,37 @@ const FieldObject = struct {
     lastFrame: u64 = 0,
 };
 
-const Game = struct {
-    const FieldObjects = Table(FieldObject);
+const Health = struct {
+    maxHealth: u32,
+    health: u32,
+};
 
+const Tower = struct {
+    fireDelay: u64,
+    lastFire: u64 = 0,
+    closestMonster: Id , // equals to itself when no monster is found.
+};
+
+const Monster = struct {};
+
+const Game = struct {
     displaySize: Vec2,
 
     lastTicks: u32 = 0,
+    ids: table.IdManager = .{},
 
     view: Rect = undefined,
     resources: Resources = undefined,
-    objects: FieldObjects = undefined,
+    objects: Table(FieldObject) = undefined,
+    healths: Table(Health) = undefined,
+    towers: Table(Tower) = undefined,
+    monsters: Table(Monster) = undefined,
 
     fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !void {
-        self.objects = FieldObjects.init(allocator);
+        self.objects = try @TypeOf(self.objects).init(allocator);
+        self.healths = try @TypeOf(self.healths).init(allocator);
+        self.towers = try @TypeOf(self.towers).init(allocator);
+        self.monsters = try @TypeOf(self.monsters).init(allocator);
         self.resources = try Resources.init(renderer);
 
         // initially 1000 wide, centered on origin
@@ -239,7 +230,6 @@ const Game = struct {
         const grid = 200;
         const step = 20;
 
-        var k: usize = 0;
         var i: i32 = -grid + 1;
         while (i < grid) : (i += 1) {
             var j: i32 = -grid + 1;
@@ -247,20 +237,41 @@ const Game = struct {
                 if (i < 5 and i > -5 and j < 5 and j > -5) {
                     continue;
                 }
-                try self.objects.add(.{ .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step }, .size = .{ .x = 8, .y = 8 }, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
+                const id = self.ids.nextId();
+                try self.monsters.add(id, .{});
+                try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
+                try self.objects.add(id, .{ .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step }, .size = .{ .x = 8, .y = 8 }, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
                     .{ .x = 2, .y = 0 },
                     .{ .x = 3, .y = 0 },
                     .{ .x = 4, .y = 0 },
                     .{ .x = 3, .y = 0 },
-                }, .animationDelay = 200, .i = k % 4 });
-                k += 1;
+                }, .animationDelay = 200, .i = id % 4 });
             }
+        }
+
+        {
+            const id = self.ids.nextId();
+            try self.towers.add(id, .{ .fireDelay = 500, .closestMonster = id });
+            try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
+            // todo: no animation should be necessary for tower
+            try self.objects.add(id, .{
+                .pos = .{ .x = 0, .y = 0 },
+                .size = .{ .x = 8, .y = 8 },
+                .sheet = &self.resources.tower,
+                .sprites = &[_]SpriteSheet.Coords{
+                    .{ .x = 0, .y = 0 },
+                },
+                .animationDelay = 200,
+            });
         }
     }
 
     fn deinit(self: *Game) void {
         self.resources.deinit();
         self.objects.deinit();
+        self.healths.deinit();
+        self.monsters.deinit();
+        self.towers.deinit();
     }
 
     fn event(self: *Game, evt: *const sdl.SDL_Event) void {
@@ -283,7 +294,7 @@ const Game = struct {
         }
     }
 
-    fn update(self: *Game, ticks: u32) void {
+    fn update(self: *Game, ticks: u32) !void {
         if (self.lastTicks == 0) {
             self.lastTicks = ticks;
             return;
@@ -296,8 +307,10 @@ const Game = struct {
             const c: Vec2 = .{ .x = 0, .y = 0 };
 
             // update state
-            var it = self.objects.iterator();
-            while (it.next()) |o| {
+            var it = self.monsters.iterator();
+            while (it.next()) |entry| {
+                const o = try self.objects.get(entry.id);
+
                 if (ticks - o.lastFrame > o.animationDelay) {
                     o.i = (o.i + 1) % o.sprites.len;
                     o.lastFrame = ticks;
@@ -332,7 +345,8 @@ const Game = struct {
 
         // draw objects
         var it = self.objects.iterator();
-        while (it.next()) |o| {
+        while (it.next()) |entry| {
+            const o = entry.value;
             const rect = Rect.centered(o.pos, o.size);
             if (self.view.intersects(rect)) {
                 const pos = o.pos.add(translation).mul(scale);
@@ -433,7 +447,7 @@ pub fn main() !void {
             }
         }
         const frameTicks = sdl.SDL_GetTicks();
-        game.update(frameTicks);
+        try game.update(frameTicks);
 
         try checkInt(sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff));
         try checkInt(sdl.SDL_RenderClear(renderer));
