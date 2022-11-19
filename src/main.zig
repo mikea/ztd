@@ -9,8 +9,10 @@ const buildOptions = @import("build_options");
 
 const Table = table.Table;
 const Id = table.Id;
+const maxId = table.maxId;
 
 const contentDir = buildOptions.content_dir;
+const SparseSet = @import("sparse_set.zig").SparseSet;
 
 const AppError = error{
     SdlInitError,
@@ -41,7 +43,11 @@ const Vec2 = struct {
         return .{ .x = a.x - b.x, .y = a.y - b.y };
     }
 
-    fn direction(from: Vec2, to: Vec2) Vec2 {
+    fn dist(from: Vec2, to: Vec2) f32 {
+        return minus(to, from).norm();
+    }
+
+    fn dir(from: Vec2, to: Vec2) Vec2 {
         return minus(to, from).normalized();
     }
 
@@ -165,17 +171,20 @@ const SpriteSheet = struct {
 const Resources = struct {
     redDemon: SpriteSheet,
     tower: SpriteSheet,
+    fireballProjectile: SpriteSheet,
 
     fn init(renderer: *sdl.SDL_Renderer) !Resources {
         return .{
             .redDemon = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16),
             .tower = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16),
+            .fireballProjectile = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16),
         };
     }
 
     fn deinit(self: *@This()) void {
         self.redDemon.deinit();
         self.tower.deinit();
+        self.fireballProjectile.deinit();
     }
 };
 
@@ -196,11 +205,20 @@ const Health = struct {
 
 const Tower = struct {
     fireDelay: u64,
+    missileSpeed: f32,
     lastFire: u64 = 0,
-    closestMonster: Id , // equals to itself when no monster is found.
+    closestMonster: Id, // equals to itself when no monster is found.
+    closestMonsterDistance: f32 = 0,
 };
 
-const Monster = struct {};
+const Monster = struct {
+    speed: f32,
+};
+
+const Projectile = struct {
+    v: f32,
+    target: Id,
+};
 
 const Game = struct {
     displaySize: Vec2,
@@ -214,13 +232,16 @@ const Game = struct {
     healths: Table(Health) = undefined,
     towers: Table(Tower) = undefined,
     monsters: Table(Monster) = undefined,
+    projectiles: Table(Projectile) = undefined,
 
     fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !void {
+        self.resources = try Resources.init(renderer);
+
         self.objects = try @TypeOf(self.objects).init(allocator);
         self.healths = try @TypeOf(self.healths).init(allocator);
         self.towers = try @TypeOf(self.towers).init(allocator);
         self.monsters = try @TypeOf(self.monsters).init(allocator);
-        self.resources = try Resources.init(renderer);
+        self.projectiles = try @TypeOf(self.projectiles).init(allocator);
 
         // initially 1000 wide, centered on origin
         const w = 1000;
@@ -238,7 +259,7 @@ const Game = struct {
                     continue;
                 }
                 const id = self.ids.nextId();
-                try self.monsters.add(id, .{});
+                try self.monsters.add(id, .{ .speed = 10 });
                 try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
                 try self.objects.add(id, .{ .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step }, .size = .{ .x = 8, .y = 8 }, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
                     .{ .x = 2, .y = 0 },
@@ -251,7 +272,7 @@ const Game = struct {
 
         {
             const id = self.ids.nextId();
-            try self.towers.add(id, .{ .fireDelay = 500, .closestMonster = id });
+            try self.towers.add(id, .{ .fireDelay = 500, .missileSpeed = 300, .closestMonster = id });
             try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
             // todo: no animation should be necessary for tower
             try self.objects.add(id, .{
@@ -272,6 +293,15 @@ const Game = struct {
         self.healths.deinit();
         self.monsters.deinit();
         self.towers.deinit();
+        self.projectiles.deinit();
+    }
+
+    fn delete(self: *Game, id: Id) !void {
+        try self.objects.delete(id);
+        try self.healths.delete(id);
+        try self.monsters.delete(id);
+        try self.towers.delete(id);
+        try self.projectiles.delete(id);
     }
 
     fn event(self: *Game, evt: *const sdl.SDL_Event) void {
@@ -294,16 +324,26 @@ const Game = struct {
         }
     }
 
-    fn update(self: *Game, ticks: u32) !void {
+    fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
         if (self.lastTicks == 0) {
             self.lastTicks = ticks;
             return;
+        }
+
+        {
+            // reset closest monsters
+            var it = self.towers.iterator();
+            while (it.next()) |entry| {
+                entry.value.closestMonster = entry.id;
+                entry.value.closestMonsterDistance = std.math.floatMax(f32);
+            }
         }
 
         // const t = 0.001 * @intToFloat(f32, ticks - startTicks);
         const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
 
         {
+            // move monsters
             const c: Vec2 = .{ .x = 0, .y = 0 };
 
             // update state
@@ -318,9 +358,90 @@ const Game = struct {
                 const d = Vec2.minus(c, o.pos);
                 const n = d.norm();
                 if (n > 1.0e-2) {
-                    const dn = d.mul(20 * dt / n);
+                    const dn = d.mul(entry.value.speed * dt / n);
                     o.pos = o.pos.add(dn);
                 }
+            }
+        }
+
+        {
+            // update closest monsters
+            var monsterIt = self.monsters.iterator();
+            while (monsterIt.next()) |monsterEntry| {
+                const mo = try self.objects.get(monsterEntry.id);
+
+                var towerIt = self.towers.iterator();
+                while (towerIt.next()) |towerEntry| {
+                    const to = try self.objects.get(towerEntry.id);
+                    const d = to.pos.dist(mo.pos);
+                    if (towerEntry.value.closestMonster == towerEntry.id or d < towerEntry.value.closestMonsterDistance) {
+                        towerEntry.value.closestMonster = monsterEntry.id;
+                        towerEntry.value.closestMonsterDistance = d;
+                    }
+                }
+            }
+        }
+
+        {
+            // fire from towers
+            var it = self.towers.iterator();
+            while (it.next()) |entry| {
+                const tower = &entry.value;
+
+                if (tower.closestMonster == entry.id or
+                    ticks - tower.lastFire < tower.fireDelay)
+                {
+                    continue;
+                }
+
+                tower.lastFire = ticks;
+                const id = self.ids.nextId();
+                try self.projectiles.add(id, .{ .target = tower.closestMonster, .v = tower.missileSpeed });
+                // todo: no animation should not be necessary for projectile
+                try self.objects.add(id, .{
+                    .pos = (try self.objects.get(entry.id)).pos,
+                    .size = .{ .x = 8, .y = 8 },
+                    .sheet = &self.resources.fireballProjectile,
+                    .sprites = &[_]SpriteSheet.Coords{
+                        .{ .x = 0, .y = 0 },
+                    },
+                    .animationDelay = 200,
+                });
+            }
+        }
+
+        {
+            // move projectiles
+            var toDelete = try SparseSet(Id, maxId, void).init(frameAllocator);
+            defer toDelete.deinit();
+
+            var it = self.projectiles.iterator();
+            while (it.next()) |entry| {
+                // std.log.debug("projection entry: {}", .{entry});
+                const projectile = try self.objects.get(entry.id);
+                const target = self.objects.find(entry.value.target) orelse {
+                    // this projectile's target doesn't exist anymore, delete it.
+                    try toDelete.add(entry.id, {});
+                    continue;
+                };
+
+                const ds = entry.value.v * dt;
+
+                const dir = target.value.pos.minus(projectile.pos);
+                const n = dir.norm();
+                if (n < ds) {
+                    try toDelete.add(entry.value.target, {});
+                    try toDelete.add(entry.id, {});
+                } else {
+                    const dn = dir.mul(ds / n);
+                    projectile.pos = projectile.pos.add(dn);
+                }
+            }
+
+            var toDeleteIt = toDelete.iterator();
+            while (toDeleteIt.next()) |entry| {
+                // std.log.debug("deleting: {}", .{entry.id});
+                try self.delete(entry.id);
             }
         }
 
@@ -447,7 +568,7 @@ pub fn main() !void {
             }
         }
         const frameTicks = sdl.SDL_GetTicks();
-        try game.update(frameTicks);
+        try game.update(frameAllocator, frameTicks);
 
         try checkInt(sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff));
         try checkInt(sdl.SDL_RenderClear(renderer));
