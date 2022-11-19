@@ -145,21 +145,17 @@ const Rect = struct {
 // -- table and things
 
 const SpriteSheet = struct {
-    surface: *sdl.SDL_Surface,
     texture: *sdl.SDL_Texture,
     w: u16,
     h: u16,
 
     fn load(renderer: *sdl.SDL_Renderer, file: [*:0]const u8, w: u16, h: u16) !SpriteSheet {
-        const surface = try checkNotNull(sdl.SDL_Surface, sdl.IMG_Load(file));
-        const texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(renderer, surface));
-
-        return .{ .surface = surface, .texture = texture, .w = w, .h = h };
+        const texture = try checkNotNull(sdl.SDL_Texture, sdl.IMG_LoadTexture(renderer, file));
+        return .{ .texture = texture, .w = w, .h = h };
     }
 
     fn deinit(self: *@This()) void {
         sdl.SDL_DestroyTexture(self.texture);
-        sdl.SDL_FreeSurface(self.surface);
     }
 
     const Coords = struct {
@@ -350,53 +346,13 @@ const Game = struct {
         }
     }
 
-    fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
-        if (self.lastTicks == 0) {
-            self.lastTicks = ticks;
-            return;
-        }
-
+    fn updateClosestMonsters(self: *Game) !void {
         {
             // reset closest monsters
             var it = self.towers.iterator();
             while (it.next()) |entry| {
                 entry.value.closestMonster = entry.id;
                 entry.value.closestMonsterDistance = std.math.floatMax(f32);
-            }
-        }
-
-        // const t = 0.001 * @intToFloat(f32, ticks - startTicks);
-        const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
-
-        {
-            // advance animation
-            var it = self.animations.iterator();
-            while (it.next()) |entry| {
-                const animation = &entry.value;
-                if (ticks - animation.lastFrame > animation.animationDelay) {
-                    animation.i = (animation.i + 1) % animation.sprites.len;
-                    animation.lastFrame = ticks;
-                }
-                const coords = animation.sprites[animation.i];
-                try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y));
-            }
-        }
-
-        {
-            // move monsters
-            const c: Vec2 = .{ .x = 0, .y = 0 };
-
-            // update state
-            var it = self.monsters.iterator();
-            while (it.next()) |entry| {
-                const o = try self.objects.get(entry.id);
-
-                const d = Vec2.minus(c, o.pos);
-                const n = d.norm();
-                if (n > 1.0e-2) {
-                    const dn = d.mul(entry.value.speed * dt / n);
-                    o.pos = o.pos.add(dn);
-                }
             }
         }
 
@@ -417,6 +373,43 @@ const Game = struct {
                 }
             }
         }
+    }
+
+    fn updateMonsters(self: *Game, ticks: u32) !void {
+        const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
+
+        const c: Vec2 = .{ .x = 0, .y = 0 };
+
+        // update state
+        var it = self.monsters.iterator();
+        while (it.next()) |entry| {
+            const o = try self.objects.get(entry.id);
+
+            const d = Vec2.minus(c, o.pos);
+            const n = d.norm();
+            if (n > 1.0e-2) {
+                const dn = d.mul(entry.value.speed * dt / n);
+                o.pos = o.pos.add(dn);
+            }
+        }
+    }
+
+    fn updateAnimations(self: *Game, ticks: u32) !void {
+        // advance animation
+        var it = self.animations.iterator();
+        while (it.next()) |entry| {
+            const animation = &entry.value;
+            if (ticks - animation.lastFrame > animation.animationDelay) {
+                animation.i = (animation.i + 1) % animation.sprites.len;
+                animation.lastFrame = ticks;
+            }
+            const coords = animation.sprites[animation.i];
+            try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y));
+        }
+    }
+
+    fn updateTowers(self: *Game, ticks: u32) !void {
+        try self.updateClosestMonsters();
 
         {
             // fire from towers
@@ -441,9 +434,12 @@ const Game = struct {
                 try self.sprites.add(id, self.resources.fireballProjectile.sprite(0, 0));
             }
         }
+    }
 
+    fn updateProjectiles(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
         {
             // move projectiles
+            const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
             var toDelete = try SparseSet(Id, maxId, void).init(frameAllocator);
             defer toDelete.deinit();
 
@@ -476,6 +472,18 @@ const Game = struct {
                 try self.delete(entry.id);
             }
         }
+    }
+
+    fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
+        if (self.lastTicks == 0) {
+            self.lastTicks = ticks;
+            return;
+        }
+
+        try self.updateMonsters(ticks);
+        try self.updateTowers(ticks);
+        try self.updateProjectiles(frameAllocator, ticks);
+        try self.updateAnimations(ticks);
 
         self.lastTicks = ticks;
     }
