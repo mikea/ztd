@@ -177,12 +177,14 @@ const Resources = struct {
     redDemon: SpriteSheet,
     tower: SpriteSheet,
     fireballProjectile: SpriteSheet,
+    woodKeep: SpriteSheet,
 
     fn init(renderer: *sdl.SDL_Renderer) !Resources {
         return .{
             .redDemon = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16),
             .tower = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16),
             .fireballProjectile = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16),
+            .woodKeep = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Keep.png", 32, 32),
         };
     }
 
@@ -190,6 +192,7 @@ const Resources = struct {
         self.redDemon.deinit();
         self.tower.deinit();
         self.fireballProjectile.deinit();
+        self.woodKeep.deinit();
     }
 };
 
@@ -277,7 +280,7 @@ const Game = struct {
                     continue;
                 }
                 const id = self.ids.nextId();
-                try self.monsters.add(id, .{ .speed = 10 });
+                try self.monsters.add(id, .{ .speed = 5 });
                 try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
                 try self.objects.add(id, .{
                     .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step },
@@ -292,16 +295,20 @@ const Game = struct {
             }
         }
 
+        try self.addTower(.{ .x = -15, .y = 0 });
+        try self.addTower(.{ .x = 15, .y = 0 });
+        try self.addTower(.{ .x = 0, .y = 15 });
+        try self.addTower(.{ .x = 0, .y = -15 });
+
         {
             const id = self.ids.nextId();
-            try self.towers.add(id, .{ .fireDelay = 500, .missileSpeed = 300, .closestMonster = id });
-            try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-            // todo: no animation should be necessary for tower
+
+            // add keep
             try self.objects.add(id, .{
                 .pos = .{ .x = 0, .y = 0 },
-                .size = .{ .x = 8, .y = 8 },
+                .size = .{ .x = 16, .y = 16 },
             });
-            try self.sprites.add(id, self.resources.tower.sprite(0, 0));
+        try self.sprites.add(id, self.resources.woodKeep.sprite(0, 0));
         }
     }
 
@@ -324,6 +331,18 @@ const Game = struct {
         try self.projectiles.delete(id);
         try self.sprites.delete(id);
         try self.animations.delete(id);
+    }
+
+    fn addTower(self: *Game, pos: Vec2) !void {
+        const id = self.ids.nextId();
+        try self.towers.add(id, .{ .fireDelay = 500, .missileSpeed = 300, .closestMonster = id });
+        try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
+        // todo: no animation should be necessary for tower
+        try self.objects.add(id, .{
+            .pos = pos,
+            .size = .{ .x = 8, .y = 8 },
+        });
+        try self.sprites.add(id, self.resources.tower.sprite(0, 0));
     }
 
     fn event(self: *Game, evt: *const sdl.SDL_Event) void {
