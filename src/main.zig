@@ -166,6 +166,15 @@ const SpriteSheet = struct {
         x: u16,
         y: u16,
     };
+
+    fn sprite(self: *@This(), x: u16, y: u16) Sprite {
+        return .{ .texture = self.texture, .src = sdl.SDL_Rect{
+            .x = x * self.w,
+            .y = y * self.h,
+            .w = self.w,
+            .h = self.h,
+        } };
+    }
 };
 
 const Resources = struct {
@@ -191,11 +200,6 @@ const Resources = struct {
 const FieldObject = struct {
     pos: Vec2,
     size: Vec2,
-    sheet: *SpriteSheet,
-    sprites: []const SpriteSheet.Coords,
-    animationDelay: u32,
-    i: usize = 0,
-    lastFrame: u64 = 0,
 };
 
 const Health = struct {
@@ -220,6 +224,20 @@ const Projectile = struct {
     target: Id,
 };
 
+const Sprite = struct {
+    texture: *sdl.SDL_Texture,
+
+    src: sdl.SDL_Rect,
+};
+
+const Animation = struct {
+    sheet: *SpriteSheet,
+    sprites: []const SpriteSheet.Coords,
+    animationDelay: u32,
+    i: usize = 0,
+    lastFrame: u64 = 0,
+};
+
 const Game = struct {
     displaySize: Vec2,
 
@@ -233,6 +251,8 @@ const Game = struct {
     towers: Table(Tower) = undefined,
     monsters: Table(Monster) = undefined,
     projectiles: Table(Projectile) = undefined,
+    sprites: Table(Sprite) = undefined,
+    animations: Table(Animation) = undefined,
 
     fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !void {
         self.resources = try Resources.init(renderer);
@@ -242,6 +262,8 @@ const Game = struct {
         self.towers = try @TypeOf(self.towers).init(allocator);
         self.monsters = try @TypeOf(self.monsters).init(allocator);
         self.projectiles = try @TypeOf(self.projectiles).init(allocator);
+        self.sprites = try @TypeOf(self.sprites).init(allocator);
+        self.animations = try @TypeOf(self.animations).init(allocator);
 
         // initially 1000 wide, centered on origin
         const w = 1000;
@@ -261,12 +283,16 @@ const Game = struct {
                 const id = self.ids.nextId();
                 try self.monsters.add(id, .{ .speed = 10 });
                 try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-                try self.objects.add(id, .{ .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step }, .size = .{ .x = 8, .y = 8 }, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
+                try self.objects.add(id, .{
+                    .pos = .{ .x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step },
+                    .size = .{ .x = 8, .y = 8 },
+                });
+                try self.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
                     .{ .x = 2, .y = 0 },
                     .{ .x = 3, .y = 0 },
                     .{ .x = 4, .y = 0 },
                     .{ .x = 3, .y = 0 },
-                }, .animationDelay = 200, .i = id % 4 });
+                } });
             }
         }
 
@@ -278,12 +304,8 @@ const Game = struct {
             try self.objects.add(id, .{
                 .pos = .{ .x = 0, .y = 0 },
                 .size = .{ .x = 8, .y = 8 },
-                .sheet = &self.resources.tower,
-                .sprites = &[_]SpriteSheet.Coords{
-                    .{ .x = 0, .y = 0 },
-                },
-                .animationDelay = 200,
             });
+            try self.sprites.add(id, self.resources.tower.sprite(0, 0));
         }
     }
 
@@ -294,6 +316,8 @@ const Game = struct {
         self.monsters.deinit();
         self.towers.deinit();
         self.projectiles.deinit();
+        self.sprites.deinit();
+        self.animations.deinit();
     }
 
     fn delete(self: *Game, id: Id) !void {
@@ -302,6 +326,8 @@ const Game = struct {
         try self.monsters.delete(id);
         try self.towers.delete(id);
         try self.projectiles.delete(id);
+        try self.sprites.delete(id);
+        try self.animations.delete(id);
     }
 
     fn event(self: *Game, evt: *const sdl.SDL_Event) void {
@@ -343,6 +369,20 @@ const Game = struct {
         const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
 
         {
+            // advance animation
+            var it = self.animations.iterator();
+            while (it.next()) |entry| {
+                const animation = &entry.value;
+                if (ticks - animation.lastFrame > animation.animationDelay) {
+                    animation.i = (animation.i + 1) % animation.sprites.len;
+                    animation.lastFrame = ticks;
+                }
+                const coords = animation.sprites[animation.i];
+                try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y));
+            }
+        }
+
+        {
             // move monsters
             const c: Vec2 = .{ .x = 0, .y = 0 };
 
@@ -351,10 +391,6 @@ const Game = struct {
             while (it.next()) |entry| {
                 const o = try self.objects.get(entry.id);
 
-                if (ticks - o.lastFrame > o.animationDelay) {
-                    o.i = (o.i + 1) % o.sprites.len;
-                    o.lastFrame = ticks;
-                }
                 const d = Vec2.minus(c, o.pos);
                 const n = d.norm();
                 if (n > 1.0e-2) {
@@ -401,12 +437,8 @@ const Game = struct {
                 try self.objects.add(id, .{
                     .pos = (try self.objects.get(entry.id)).pos,
                     .size = .{ .x = 8, .y = 8 },
-                    .sheet = &self.resources.fireballProjectile,
-                    .sprites = &[_]SpriteSheet.Coords{
-                        .{ .x = 0, .y = 0 },
-                    },
-                    .animationDelay = 200,
                 });
+                try self.sprites.add(id, self.resources.fireballProjectile.sprite(0, 0));
             }
         }
 
@@ -465,30 +497,15 @@ const Game = struct {
         try checkInt(sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0, 0, 0xff));
 
         // draw objects
-        var it = self.objects.iterator();
+        var it = self.sprites.iterator();
         while (it.next()) |entry| {
-            const o = entry.value;
+            const sprite = entry.value;
+            const o = try self.objects.get(entry.id);
             const rect = Rect.centered(o.pos, o.size);
             if (self.view.intersects(rect)) {
                 const pos = o.pos.add(translation).mul(scale);
                 const size = o.size.mul(scale);
-                // const newSize = rect.size().mul(scale);
 
-                // std.log.info("pos: {} rect: {} newA: {} newSize: {}", .{ o.pos, rect, newA, newSize });
-
-                // const sdlRect = sdl.SDL_Rect{
-                //     .x = @floatToInt(i32, newA.x),
-                //     .y = @floatToInt(i32, newA.y),
-                //     .w = @floatToInt(i32, newSize.x),
-                //     .h = @floatToInt(i32, newSize.y),
-                // };
-                // try checkInt(sdl.SDL_RenderFillRect(renderer, &sdlRect));
-                const srcRect = sdl.SDL_Rect{
-                    .x = o.sprites[o.i].x * o.sheet.w,
-                    .y = o.sprites[o.i].y * o.sheet.h,
-                    .w = o.sheet.w,
-                    .h = o.sheet.h,
-                };
                 const destRect = sdl.SDL_Rect{
                     .x = @floatToInt(i32, pos.x - size.x / 2),
                     .y = @floatToInt(i32, pos.y - size.y / 2),
@@ -496,7 +513,7 @@ const Game = struct {
                     .h = @floatToInt(i32, size.y),
                 };
 
-                try checkInt(sdl.SDL_RenderCopy(renderer, o.sheet.texture, &srcRect, &destRect));
+                try checkInt(sdl.SDL_RenderCopy(renderer, sprite.texture, &sprite.src, &destRect));
             }
         }
     }
