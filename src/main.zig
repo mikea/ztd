@@ -78,6 +78,10 @@ const Vec2 = struct {
             self.y,
         });
     }
+
+    pub fn angle(self: *const Vec2) f32 {
+        return std.math.atan2(f32, self.y, self.x);
+    }
 };
 
 const Rect = struct {
@@ -163,13 +167,13 @@ const SpriteSheet = struct {
         y: u16,
     };
 
-    fn sprite(self: *@This(), x: u16, y: u16) Sprite {
+    fn sprite(self: *@This(), x: u16, y: u16, angle: f64) Sprite {
         return .{ .texture = self.texture, .src = sdl.SDL_Rect{
             .x = x * self.w,
             .y = y * self.h,
             .w = self.w,
             .h = self.h,
-        } };
+        }, .angle = angle };
     }
 };
 
@@ -225,8 +229,8 @@ const Projectile = struct {
 
 const Sprite = struct {
     texture: *sdl.SDL_Texture,
-
     src: sdl.SDL_Rect,
+    angle: f64,
 };
 
 const Animation = struct {
@@ -308,7 +312,7 @@ const Game = struct {
                 .pos = .{ .x = 0, .y = 0 },
                 .size = .{ .x = 16, .y = 16 },
             });
-        try self.sprites.add(id, self.resources.woodKeep.sprite(0, 0));
+            try self.sprites.add(id, self.resources.woodKeep.sprite(0, 0, 0));
         }
     }
 
@@ -342,7 +346,7 @@ const Game = struct {
             .pos = pos,
             .size = .{ .x = 8, .y = 8 },
         });
-        try self.sprites.add(id, self.resources.tower.sprite(0, 0));
+        try self.sprites.add(id, self.resources.tower.sprite(0, 0, 0));
     }
 
     fn event(self: *Game, evt: *const sdl.SDL_Event) void {
@@ -423,7 +427,7 @@ const Game = struct {
                 animation.lastFrame = ticks;
             }
             const coords = animation.sprites[animation.i];
-            try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y));
+            try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y, 0));
         }
     }
 
@@ -450,7 +454,7 @@ const Game = struct {
                     .pos = (try self.objects.get(entry.id)).pos,
                     .size = .{ .x = 8, .y = 8 },
                 });
-                try self.sprites.add(id, self.resources.fireballProjectile.sprite(0, 0));
+                try self.sprites.add(id, self.resources.fireballProjectile.sprite(0, 0, 90));
             }
         }
     }
@@ -483,6 +487,8 @@ const Game = struct {
                     const dn = dir.mul(ds / n);
                     projectile.pos = projectile.pos.add(dn);
                 }
+
+                (try self.sprites.get(entry.id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
             }
 
             var toDeleteIt = toDelete.iterator();
@@ -514,16 +520,10 @@ const Game = struct {
         const viewport = Rect.sized(.{ .x = @intToFloat(f32, sdlViewport.x), .y = @intToFloat(f32, sdlViewport.y) }, .{ .x = @intToFloat(f32, sdlViewport.w), .y = @intToFloat(f32, sdlViewport.h) });
         const view = self.view;
 
-        // std.log.info("viewport: {}", .{viewport});
-        // std.log.info("view: {}", .{view});
-
         const translation = viewport.a.minus(view.a);
         const scale = viewport.size().x / view.size().x;
-        // std.log.info("translation: {} scale: {}", .{ translation, scale });
 
-        try checkInt(sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0, 0, 0xff));
-
-        // draw objects
+        // draw sprites
         var it = self.sprites.iterator();
         while (it.next()) |entry| {
             const sprite = entry.value;
@@ -540,7 +540,7 @@ const Game = struct {
                     .h = @floatToInt(i32, size.y),
                 };
 
-                try checkInt(sdl.SDL_RenderCopy(renderer, sprite.texture, &sprite.src, &destRect));
+                try checkInt(sdl.SDL_RenderCopyEx(renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.SDL_FLIP_NONE));
             }
         }
     }
