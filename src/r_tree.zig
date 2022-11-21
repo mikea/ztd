@@ -9,90 +9,130 @@ const Rect = geom.Rect;
 const inf = std.math.inf_f32;
 const assert = std.debug.assert;
 
-const NodeType = enum { leaf, middle };
-
 pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: usize) type {
+    const Entry = struct {
+        id: Id,
+        rect: Rect,
+
+        pub fn format(
+            self: *const @This(),
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            try writer.print("(id={},rect={})", .{ self.id, self.rect });
+        }
+    };
+
+    const Node = struct {
+        const This = @This();
+        const NodeType = enum { leaf, middle };
+
+        parent: ?*This = null,
+        rect: Rect = Rect.init(0, 0, 0, 0),
+        len: usize = 0,
+        items: union(NodeType) {
+            leaf: [leafSize + 1]Entry,
+            middle: [middleSize + 1]*This,
+        },
+
+        fn init(allocator: std.mem.Allocator, comptime T: type, items: []const T) !*This {
+            var node = try allocator.create(This);
+            var rect = items[0].rect;
+
+            if (items.len > 1) {
+                for (items) |item| {
+                    rect = rect.add(item.rect);
+                    if (T == *This) {
+                        item.parent = node;
+                    }
+                }
+            }
+
+            switch (T) {
+                Entry => {
+                    node.* = .{ .len = 1, .rect = rect, .items = .{ .leaf = undefined } };
+                    std.mem.copy(T, &(node.items.leaf), items);
+                },
+                *This => {
+                    node.* = .{ .len = items.len, .rect = rect, .items = .{ .middle = undefined } };
+                    std.mem.copy(T, &(node.items.middle), items);
+                },
+                else => unreachable,
+            }
+
+            return node;
+        }
+
+        fn add(self: *This, comptime T: type, entryOrChild: T) void {
+            switch (T) {
+                Entry => self.items.leaf[self.len] = entryOrChild,
+                *This => self.items.middle[self.len] = entryOrChild,
+                else => unreachable,
+            }
+
+            self.len += 1;
+            if (self.len == 1) {
+                self.rect = entryOrChild.rect;
+            } else {
+                self.rect = self.rect.add(entryOrChild.rect);
+            }
+        }
+
+        pub fn format(
+            self: *const @This(),
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            switch (self.*.items) {
+                .leaf => |entries| try writer.print("Leaf[rect={}, items={s}]", .{ self.rect, entries[0..self.len] }),
+                .middle => |children| {
+                    try writer.print("Middle[rect={}, children={s}]", .{ self.rect, children[0..self.len] });
+                },
+            }
+        }
+
+        fn chooseLeaf(self: *This, rect: Rect) *This {
+            var node = self;
+            while (true) {
+                switch (node.*.items) {
+                    .leaf => return node,
+                    .middle => |children| node = chooseNode(children[0..node.len], rect),
+                }
+            }
+        }
+
+        // chooses a node that will gain the least area if extended to include
+        // given rect.
+        fn chooseNode(nodes: []const *This, rect: Rect) *This {
+            var result: *This = nodes[0];
+            var minIncrease: f32 = std.math.inf_f32;
+
+            for (nodes) |node| {
+                const nodeArea = node.rect.area();
+                const newArea = node.rect.add(rect).area();
+
+                if ((newArea - nodeArea) < minIncrease) {
+                    minIncrease = newArea - nodeArea;
+                    result = node;
+                }
+            }
+
+            return result;
+        }
+
+        fn adjustTree(startNode: ?*This, rect: Rect) void {
+            var n = startNode;
+            while (n) |node| {
+                node.rect = node.rect.add(rect);
+                n = node.parent;
+            }
+        }
+    };
+
     return struct {
-        const Entry = struct {
-            id: Id,
-            rect: Rect,
-
-            pub fn format(
-                self: *const @This(),
-                comptime _: []const u8,
-                _: std.fmt.FormatOptions,
-                writer: anytype,
-            ) !void {
-                try writer.print("(id={},rect={})", .{ self.id, self.rect });
-            }
-        };
-
-        const Node = struct {
-            parent: ?*Node = null,
-            rect: Rect = Rect.init(0, 0, 0, 0),
-            len: usize = 0,
-
-            items: union(NodeType) {
-                leaf: [leafSize + 1]Entry,
-                middle: [middleSize + 1]*Node,
-            },
-
-            fn initMiddle(allocator: std.mem.Allocator, initialChildren: []const *Node) !*Node {
-                var node = try allocator.create(Node);
-                var rect = initialChildren[0].rect;
-                for (initialChildren) |child| {
-                    rect = rect.add(child.rect);
-                    child.parent = node;
-                }
-                node.* = .{ .len = initialChildren.len, .rect = rect, .items = .{ .middle = undefined } };
-                std.mem.copy(*Node, &node.items.middle, initialChildren);
-                return node;
-            }
-
-            fn initLeaf(allocator: std.mem.Allocator, entry: Entry) !*Node {
-                var node = try allocator.create(Node);
-                node.* = .{ .len = 1, .rect = entry.rect, .items = .{ .leaf = undefined } };
-                node.items.leaf[0] = entry;
-                return node;
-            }
-
-            fn addEntry(self: *@This(), entry: Entry) void {
-                self.items.leaf[self.len] = entry;
-                self.len += 1;
-                if (self.len == 1) {
-                    self.rect = entry.rect;
-                } else {
-                    self.rect = self.rect.add(entry.rect);
-                }
-            }
-
-            fn addChild(self: *@This(), child: *Node) void {
-                self.items.middle[self.len] = child;
-                self.len += 1;
-                if (self.len == 1) {
-                    self.rect = child.rect;
-                } else {
-                    self.rect = self.rect.add(child.rect);
-                }
-            }
-
-            pub fn format(
-                self: *const @This(),
-                comptime _: []const u8,
-                _: std.fmt.FormatOptions,
-                writer: anytype,
-            ) !void {
-                switch (self.*.items) {
-                    .leaf => |entries| try writer.print("Leaf[rect={}, items={s}]", .{ self.rect, entries[0..self.len] }),
-                    .middle => |children| {
-                        try writer.print("Middle[rect={}, children={s}]", .{ self.rect, children[0..self.len] });
-                    },
-                }
-            }
-        };
-
         allocator: std.mem.Allocator,
-
         root: *Node,
 
         pub fn init(allocator: std.mem.Allocator) !@This() {
@@ -118,83 +158,41 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
         }
 
         pub fn insert(self: *@This(), id: Id, rect: Rect) !void {
-            const leafNode = self.chooseLeaf(rect);
-            leafNode.addEntry(.{ .id = id, .rect = rect });
-            adjustTree(leafNode.parent, rect);
-
+            const leafNode = self.root.chooseLeaf(rect);
+            leafNode.add(Entry, .{ .id = id, .rect = rect });
+            Node.adjustTree(leafNode.parent, rect);
             if (leafNode.len == leafNode.items.leaf.len) {
-                // leaf doesn't have enough room, split it
-                var splitNodes = try self.splitLeaf(leafNode);
-                try self.replaceSplitChild(leafNode.parent, leafNode, splitNodes);
+                try self.splitNode(Entry, leafNode);
             }
         }
 
-        fn chooseLeaf(self: *@This(), rect: Rect) *Node {
-            var node = self.root;
-            while (true) {
-                switch (node.*.items) {
-                    .leaf => return node,
-                    .middle => |children| node = chooseNode(children[0..node.len], rect),
-                }
-            }
-        }
-
-        fn adjustTree(node: ?*Node, rect: Rect) void {
-            var n = node;
-            while (n != null) {
-                n.?.rect = n.?.rect.add(rect);
-                n = n.?.parent;
-            }
-        }
-
-        fn splitLeaf(self: *@This(), node: *Node) ![2]*Node {
-            var entries = node.items.leaf;
-            // QS1 pick first entry for each group
-            const seeds = linearPickSeeds(Entry, &entries);
-            var result: [2]*Node = undefined;
-
-            for (seeds) |seed, i| {
-                result[i] = try Node.initLeaf(self.allocator, entries[seed]);
-            }
-
-            // add the rest
-            for (entries) |entry, i| {
-                if (i != seeds[0] and i != seeds[1]) {
-                    chooseNode(&result, entry.rect).addEntry(entry);
-                }
-            }
-
-            return result;
-        }
-
-        fn splitMiddle(self: *@This(), node: *Node) ![2]*Node {
-            var children = node.items.middle;
+        fn splitNode(self: *@This(), comptime T: type, node: *Node) error{OutOfMemory}!void {
+            var items = if (T == Entry) node.items.leaf else node.items.middle;
 
             // QS1 pick first entry for each group
-            const seeds = linearPickSeeds(*Node, &children);
+            const seeds = linearPickSeeds(T, &items);
             var result = [2]*Node{
-                try Node.initMiddle(self.allocator, &[_]*Node{children[seeds[0]]}),
-                try Node.initMiddle(self.allocator, &[_]*Node{children[seeds[1]]}),
+                try Node.init(self.allocator, T, &[_]T{items[seeds[0]]}),
+                try Node.init(self.allocator, T, &[_]T{items[seeds[1]]}),
             };
 
             // add the rest
-            for (children) |child, i| {
+            for (items) |item, i| {
                 if (i != seeds[0] and i != seeds[1]) {
-                    chooseNode(&result, child.rect).addChild(child);
+                    Node.chooseNode(&result, item.rect).add(T, item);
                 }
             }
 
-            return result;
+            try self.replaceSplitChild(node.parent, node, result);
         }
 
         fn replaceSplitChild(self: *@This(), maybeParent: ?*Node, child: *Node, split: [2]*Node) !void {
             defer self.allocator.destroy(child);
-            
+
             if (maybeParent == null) {
                 // splitting the root
                 assert(child == self.root);
-                const newRoot = try Node.initMiddle(self.allocator, &split);
-                self.root = newRoot;
+                self.root = try Node.init(self.allocator, *Node, &split);
                 return;
             }
 
@@ -210,94 +208,8 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
             parent.len += 1;
             split[0].parent = parent;
             split[1].parent = parent;
-            try self.maybeSplitMiddle(parent);
-        }
-
-        fn maybeSplitMiddle(self: *@This(), node: *Node) error{OutOfMemory}!void {
-            if (node.len < node.items.middle.len) {
-                return;
-            }
-
-            var splitNodes = try self.splitMiddle(node);
-            try self.replaceSplitChild(node.parent, node, splitNodes);
-        }
-
-        // chooses a node that will gain the least area if extended to include
-        // given rect.
-        fn chooseNode(nodes: []const *Node, rect: Rect) *Node {
-            var result: *Node = nodes[0];
-            var minIncrease: f32 = std.math.inf_f32;
-
-            for (nodes) |node| {
-                const nodeArea = node.rect.area();
-                const newArea = node.rect.add(rect).area();
-
-                if ((newArea - nodeArea) < minIncrease) {
-                    minIncrease = newArea - nodeArea;
-                    result = node;
-                }
-            }
-
-            return result;
-        }
-
-        fn linearPickSeeds(comptime T: type, entries: []T) [2]usize {
-            // LPS1 Find extreme rectangles along all dimensions
-            const first = entries[0].rect;
-            const last = entries[entries.len - 1].rect;
-
-            var lowestX = first.a.x;
-            var lowestY = first.a.y;
-            var highestX = first.b.x;
-            var highestY = first.b.y;
-
-            var highestLowX = first.a.x;
-            var highestLowXIdx: usize = 0;
-            var lowestHighX = last.b.x;
-            var lowestHighXIdx: usize = entries.len - 1;
-
-            var highestLowY = first.a.y;
-            var highestLowYIdx: usize = 0;
-            var lowestHighY = last.b.y;
-            var lowestHighYIdx: usize = entries.len - 1;
-
-            for (entries) |entry, i| {
-                lowestX = std.math.min(lowestX, entry.rect.a.x);
-                lowestY = std.math.min(lowestY, entry.rect.a.y);
-
-                highestX = std.math.max(highestX, entry.rect.b.x);
-                highestY = std.math.max(highestY, entry.rect.b.y);
-
-                if (entry.rect.a.x > highestLowX) {
-                    highestLowX = entry.rect.a.x;
-                    highestLowXIdx = i;
-                }
-                if (entry.rect.a.y > highestLowY) {
-                    highestLowY = entry.rect.a.y;
-                    highestLowYIdx = i;
-                }
-
-                if (entry.rect.b.x < lowestHighX and i != highestLowXIdx) {
-                    lowestHighX = entry.rect.b.x;
-                    lowestHighXIdx = i;
-                }
-                if (entry.rect.b.y < lowestHighY and i != highestLowYIdx) {
-                    lowestHighY = entry.rect.b.y;
-                    lowestHighYIdx = i;
-                }
-            }
-
-            const separationX = std.math.fabs(lowestHighX - highestLowX);
-            const separationY = std.math.fabs(lowestHighY - highestLowY);
-
-            // LPS2 Adjust for shape of the rectangle cluster
-            const normSeparationX = separationX / (highestX - lowestX);
-            const normSeparationY = separationY / (highestY - lowestY);
-
-            if (normSeparationX > normSeparationY) {
-                return [_]usize{ lowestHighXIdx, highestLowXIdx };
-            } else {
-                return [_]usize{ lowestHighYIdx, highestLowYIdx };
+            if (parent.len == parent.items.middle.len) {
+                try self.splitNode(*Node, parent);
             }
         }
 
@@ -311,6 +223,68 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
         }
     };
 }
+
+fn linearPickSeeds(comptime T: type, entries: []T) [2]usize {
+    // LPS1 Find extreme rectangles along all dimensions
+    const first = entries[0].rect;
+    const last = entries[entries.len - 1].rect;
+
+    var lowestX = first.a.x;
+    var lowestY = first.a.y;
+    var highestX = first.b.x;
+    var highestY = first.b.y;
+
+    var highestLowX = first.a.x;
+    var highestLowXIdx: usize = 0;
+    var lowestHighX = last.b.x;
+    var lowestHighXIdx: usize = entries.len - 1;
+
+    var highestLowY = first.a.y;
+    var highestLowYIdx: usize = 0;
+    var lowestHighY = last.b.y;
+    var lowestHighYIdx: usize = entries.len - 1;
+
+    for (entries) |entry, i| {
+        lowestX = std.math.min(lowestX, entry.rect.a.x);
+        lowestY = std.math.min(lowestY, entry.rect.a.y);
+
+        highestX = std.math.max(highestX, entry.rect.b.x);
+        highestY = std.math.max(highestY, entry.rect.b.y);
+
+        if (entry.rect.a.x > highestLowX) {
+            highestLowX = entry.rect.a.x;
+            highestLowXIdx = i;
+        }
+        if (entry.rect.a.y > highestLowY) {
+            highestLowY = entry.rect.a.y;
+            highestLowYIdx = i;
+        }
+
+        if (entry.rect.b.x < lowestHighX and i != highestLowXIdx) {
+            lowestHighX = entry.rect.b.x;
+            lowestHighXIdx = i;
+        }
+        if (entry.rect.b.y < lowestHighY and i != highestLowYIdx) {
+            lowestHighY = entry.rect.b.y;
+            lowestHighYIdx = i;
+        }
+    }
+
+    const separationX = std.math.fabs(lowestHighX - highestLowX);
+    const separationY = std.math.fabs(lowestHighY - highestLowY);
+
+    // LPS2 Adjust for shape of the rectangle cluster
+    const normSeparationX = separationX / (highestX - lowestX);
+    const normSeparationY = separationY / (highestY - lowestY);
+
+    if (normSeparationX > normSeparationY) {
+        return [_]usize{ lowestHighXIdx, highestLowXIdx };
+    } else {
+        return [_]usize{ lowestHighYIdx, highestLowYIdx };
+    }
+}
+
+// tests
 
 const expect = std.testing.expect;
 
