@@ -1,5 +1,4 @@
 const std = @import("std");
-const sdl = @import("sdl.zig").sdl;
 const table = @import("table.zig");
 const geom = @import("geom.zig");
 const buildOptions = @import("build_options");
@@ -15,22 +14,16 @@ const Rect = geom.Rect;
 const contentDir = buildOptions.content_dir;
 const SparseSet = @import("sparse_set.zig").SparseSet;
 
+const sdlZig = @import("sdl.zig");
+const sdl = sdlZig.sdl;
+const checkNotNull = sdlZig.checkNotNull;
+const checkInt = sdlZig.checkInt;
+
+
 const AppError = error{
-    SdlInitError,
     NotImplementedError,
-    SdlError,
     ResourceError,
 };
-
-fn checkInt(i: c_int) !void {
-    if (i < 0) {
-        return AppError.SdlInitError;
-    }
-}
-
-fn checkNotNull(comptime T: type, ptr: ?*T) !*T {
-    return ptr orelse AppError.SdlInitError;
-}
 
 const SpriteSheet = struct {
     texture: *sdl.SDL_Texture,
@@ -66,6 +59,7 @@ const Resources = struct {
     tower: SpriteSheet,
     fireballProjectile: SpriteSheet,
     woodKeep: SpriteSheet,
+    rubik20: *sdl.TTF_Font,
 
     fn init(renderer: *sdl.SDL_Renderer) !Resources {
         return .{
@@ -73,6 +67,7 @@ const Resources = struct {
             .tower = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16),
             .fireballProjectile = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16),
             .woodKeep = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Keep.png", 32, 32),
+            .rubik20 = try checkNotNull(sdl.TTF_Font, sdl.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
         };
     }
 
@@ -81,12 +76,46 @@ const Resources = struct {
         self.tower.deinit();
         self.fireballProjectile.deinit();
         self.woodKeep.deinit();
+        sdl.TTF_CloseFont(self.rubik20);
     }
 };
 
-const FieldObject = struct {
-    pos: Vec2,
-    size: Vec2,
+const Statistics = struct {
+    engine: *engine.Engine,
+    resources: *Resources,
+
+    lastTicks: u32 = 0,
+    fpsId: Id = 0,
+    monstersId: Id = 0,
+    updateId: Id = 0,
+    renderId: Id = 0,
+
+    pub fn init(self: *Statistics) !void {
+        self.fpsId = self.engine.ids.nextId();
+        self.monstersId = self.engine.ids.nextId();
+        self.updateId = self.engine.ids.nextId();
+        self.renderId = self.engine.ids.nextId();
+    }
+
+    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, monsterCount: usize, updateDuration: u64, renderDuration: u64) !void {
+        defer self.lastTicks = ticks;
+
+        if (self.lastTicks == 0) {
+            return;
+        }
+
+        const fps = try std.fmt.allocPrintZ(frameAllocator, "{d} fps", .{1000 / (ticks - self.lastTicks)});
+        try self.engine.setText(self.fpsId, fps, .{ .x = 0, .y = 0 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+
+        const monsters = try std.fmt.allocPrintZ(frameAllocator, "{} monsters", .{monsterCount});
+        try self.engine.setText(self.monstersId, monsters, .{ .x = 0, .y = 20 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+
+        const updateText = try std.fmt.allocPrintZ(frameAllocator, "{d} ms/update", .{ @intToFloat(f64, updateDuration) / 1000000});
+        try self.engine.setText(self.updateId, updateText, .{ .x = 0, .y = 40 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+
+        const renderText = try std.fmt.allocPrintZ(frameAllocator, "{d} ms/render", .{ @intToFloat(f64, renderDuration) / 1000000});
+        try self.engine.setText(self.renderId, renderText, .{ .x = 0, .y = 60 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+    }
 };
 
 const Health = struct {
@@ -129,7 +158,10 @@ const Game = struct {
     displaySize: Vec2,
 
     lastTicks: u32 = 0,
+    lastUpdateDuration: u64 = 0,
+    lastRenderDuration: u64 = 0,
     engine: engine.Engine = .{},
+    statistics: Statistics = undefined,
 
     view: Rect = undefined,
     resources: Resources = undefined,
@@ -142,6 +174,9 @@ const Game = struct {
 
     fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !void {
         self.resources = try Resources.init(renderer);
+        self.statistics = .{ .engine = &self.engine, .resources = &self.resources };
+        try self.statistics.init();
+
         try self.engine.init(allocator, renderer);
 
         self.healths = try @TypeOf(self.healths).init(allocator);
@@ -379,6 +414,13 @@ const Game = struct {
     }
 
     fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
+        var timer = try std.time.Timer.start();
+        defer {
+            self.lastUpdateDuration = timer.read();
+        }
+
+        try self.statistics.update(ticks, frameAllocator, self.monsters.size(), self.lastUpdateDuration, self.lastRenderDuration);
+
         if (self.lastTicks == 0) {
             self.lastTicks = ticks;
             return;
@@ -393,6 +435,14 @@ const Game = struct {
     }
 
     fn render(self: *Game, renderer: *sdl.SDL_Renderer) !void {
+        var timer = try std.time.Timer.start();
+        defer {
+            self.lastRenderDuration = timer.read();
+        }
+
+        try checkInt(sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff));
+        try checkInt(sdl.SDL_RenderClear(renderer));
+
         var sdlViewport: sdl.SDL_Rect = undefined;
         sdl.SDL_RenderGetViewport(renderer, &sdlViewport);
 
@@ -421,6 +471,8 @@ const Game = struct {
                 try checkInt(sdl.SDL_RenderCopyEx(renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.SDL_FLIP_NONE));
             }
         }
+ 
+        try self.engine.render(renderer);
     }
 };
 
@@ -443,21 +495,13 @@ pub fn main() !void {
     var displayMode: sdl.SDL_DisplayMode = undefined;
     try checkInt(sdl.SDL_GetCurrentDisplayMode(0, &displayMode));
 
-    const window = sdl.SDL_CreateWindow("ZTD", sdl.SDL_WINDOWPOS_UNDEFINED, sdl.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.SDL_WINDOW_SHOWN);
-    if (window == null) {
-        return AppError.SdlInitError;
-    }
+    const window = try checkNotNull(sdl.SDL_Window, sdl.SDL_CreateWindow("ZTD", sdl.SDL_WINDOWPOS_UNDEFINED, sdl.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.SDL_WINDOW_SHOWN));
     defer sdl.SDL_DestroyWindow(window);
+
     try checkInt(sdl.SDL_SetWindowFullscreen(window, sdl.SDL_WINDOW_FULLSCREEN));
 
     try checkInt(sdl.TTF_Init());
     defer sdl.TTF_Quit();
-
-    const font = sdl.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 28);
-    if (font == null) {
-        return AppError.ResourceError;
-    }
-    defer sdl.TTF_CloseFont(font);
 
     var renderer = try checkNotNull(sdl.SDL_Renderer, sdl.SDL_CreateRenderer(window, -1, sdl.SDL_RENDERER_ACCELERATED | sdl.SDL_RENDERER_PRESENTVSYNC));
     defer sdl.SDL_DestroyRenderer(renderer);
@@ -469,9 +513,6 @@ pub fn main() !void {
     defer game.deinit();
 
     // main loop
-
-    const startTicks = sdl.SDL_GetTicks();
-    var lastFrameTicks = startTicks;
 
     mainloop: while (true) {
         var arena = std.heap.ArenaAllocator.init(allocator);
@@ -489,42 +530,8 @@ pub fn main() !void {
                 else => game.event(&event),
             }
         }
-        const frameTicks = sdl.SDL_GetTicks();
-        try game.update(frameAllocator, frameTicks);
-
-        try checkInt(sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff));
-        try checkInt(sdl.SDL_RenderClear(renderer));
-
+        try game.update(frameAllocator, sdl.SDL_GetTicks());
         try game.render(renderer);
-
-        // draw fps
-        if (frameTicks > lastFrameTicks) {
-            var text = try std.fmt.allocPrintZ(frameAllocator, "FPS: {}", .{1000 / (frameTicks - lastFrameTicks)});
-            const tt: [*:0]const u8 = text;
-            const textSurface = sdl.TTF_RenderText_Solid(font, tt, .{ .r = 0, .g = 0, .b = 255, .a = 255 });
-            defer sdl.SDL_FreeSurface(textSurface);
-
-            const texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(renderer, textSurface));
-            defer sdl.SDL_DestroyTexture(texture);
-
-            const srcRect: sdl.SDL_Rect = .{
-                .x = 0,
-                .y = 0,
-                .w = textSurface.*.w,
-                .h = textSurface.*.h,
-            };
-            const dstRect: sdl.SDL_Rect = .{
-                .x = 0,
-                .y = 0,
-                .w = textSurface.*.w,
-                .h = textSurface.*.h,
-            };
-
-            try checkInt(sdl.SDL_RenderCopy(renderer, texture, &srcRect, &dstRect));
-        }
-
         sdl.SDL_RenderPresent(renderer);
-
-        lastFrameTicks = frameTicks;
     }
 }

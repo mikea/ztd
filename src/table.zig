@@ -36,6 +36,10 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
         pub fn delete(self: *@This(), id: Id) !void {
             return self.set.delete(id);
         }
+
+        pub fn size(self: *const @This()) usize {
+            return self.set.size();
+        }
     };
 }
 
