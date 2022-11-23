@@ -129,6 +129,21 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
                 n = node.parent;
             }
         }
+
+        pub fn findIntersect(self: *const @This(), rect: Rect, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
+            switch (self.*.items) {
+                .leaf => |entries| for (entries[0..self.len]) |entry| {
+                    if (entry.rect.intersects(rect)) {
+                        try callback(callbackThis, entry.id, entry.rect);
+                    }
+                },
+                .middle => |children| for (children[0..self.len]) |child| {
+                    if (child.rect.intersects(rect)) {
+                        try child.findIntersect(rect, CallbackThis, callbackThis, callback);
+                    }
+                },
+            }
+        }
     };
 
     return struct {
@@ -211,6 +226,13 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
             if (parent.len == parent.items.middle.len) {
                 try self.splitNode(*Node, parent);
             }
+        }
+
+        pub fn findIntersect(self: *const @This(), rect: Rect, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
+            if (!self.root.rect.intersects(rect)) {
+                return;
+            }
+            try self.root.findIntersect(rect, CallbackThis, callbackThis, callback);
         }
 
         pub fn format(
@@ -366,4 +388,20 @@ test "rtree" {
         "Leaf[rect=[(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)], items={ (id=3,rect=[(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)]), (id=4,rect=[(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)]), (id=5,rect=[(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)]) }] " ++
         "}] " ++
         "}]]");
+
+    var collector: struct {
+        ids: std.ArrayList(u16) = std.ArrayList(u16).init(std.testing.allocator),
+
+        pub fn callback(self: *@This(), id: u16, _: Rect) error{OutOfMemory}!void {
+            try self.ids.append(id);
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.ids.deinit();
+        }
+    } = .{};
+    defer collector.deinit();
+
+    try tree.findIntersect(Rect.init(0, 0, 2, 2), @TypeOf(collector), &collector, @TypeOf(collector).callback);
+    try std.testing.expectEqualSlices(u16, &[_]u16{6, 7, 8, 10, 9},collector.ids.items);
 }
