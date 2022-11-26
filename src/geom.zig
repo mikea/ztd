@@ -88,7 +88,7 @@ pub const Rect = struct {
         return .{ .a = o, .b = o.add(aSize) };
     }
 
-    pub fn intersects(self: *const Rect, other: Rect) bool {
+    pub fn intersects(self: Rect, other: Rect) bool {
         // ((X,Y),(A,B)) and ((X1,Y1),(A1,B1))
         // (X,Y) = (self.a.x, self.a.y)
         // (A,B) = (self.b.x, self.b.y)
