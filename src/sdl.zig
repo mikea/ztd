@@ -76,6 +76,7 @@ pub fn drawCircle(renderer: *sdl.SDL_Renderer, r: f32) !Sprite {
 
     cairo.cairo_set_source_rgba(cr, 1.0, 0, 0, 1);
     cairo.cairo_arc(cr, w/2, w/2, r, 0, 2 * std.math.pi);
+    cairo.cairo_set_line_width(cr, 0.5);
     cairo.cairo_stroke(cr);
 
     sdl.SDL_UnlockTexture(texture);

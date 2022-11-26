@@ -167,33 +167,45 @@ const Game = struct {
         const h = w * self.displaySize.y / self.displaySize.x;
         self.view = .{ .a = .{ .x = -w / 2, .y = -h / 2 }, .b = .{ .x = w / 2, .y = h / 2 } };
 
-        const grid = 200;
-        const step = 20;
+        {
+            // init monsters
+            const grid = 200;
+            const step = 20;
 
-        var i: i32 = -grid + 1;
-        while (i < grid) : (i += 1) {
-            var j: i32 = -grid + 1;
-            while (j < grid) : (j += 1) {
-                if (i < 5 and i > -5 and j < 5 and j > -5) {
-                    continue;
+            var i: i32 = -grid + 1;
+            while (i < grid) : (i += 1) {
+                var j: i32 = -grid + 1;
+                while (j < grid) : (j += 1) {
+                    if (j < 5 and j > -5) {
+                        continue;
+                    }
+                    const id = self.engine.ids.nextId();
+                    try self.monsters.add(id, .{ .speed = 5 });
+                    try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
+                    try self.engine.bounds.add(id, Rect.initCentered(@intToFloat(f32, i) * step, @intToFloat(f32, j) * step, 8, 8));
+                    try self.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
+                        .{ .x = 2, .y = 0 },
+                        .{ .x = 3, .y = 0 },
+                        .{ .x = 4, .y = 0 },
+                        .{ .x = 3, .y = 0 },
+                    } });
                 }
-                const id = self.engine.ids.nextId();
-                try self.monsters.add(id, .{ .speed = 5 });
-                try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-                try self.engine.bounds.add(id, Rect.initCentered(@intToFloat(f32, i) * step, @intToFloat(f32, j) * step, 8, 8));
-                try self.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
-                    .{ .x = 2, .y = 0 },
-                    .{ .x = 3, .y = 0 },
-                    .{ .x = 4, .y = 0 },
-                    .{ .x = 3, .y = 0 },
-                } });
             }
         }
 
-        try self.addTower(.{ .x = -50, .y = 0 });
-        try self.addTower(.{ .x = 50, .y = 0 });
-        try self.addTower(.{ .x = 0, .y = 50 });
-        try self.addTower(.{ .x = 0, .y = -50 });
+        {
+            // init towers
+            var i: i32 = -10000;
+            while (i <= 10000) {
+                try self.addTower(.{ .x = @intToFloat(f32, i), .y = 0 });
+                i += 100;
+            }
+        }
+
+        // try self.addTower(.{ .x = -50, .y = 0 });
+        // try self.addTower(.{ .x = 50, .y = 0 });
+        // try self.addTower(.{ .x = 0, .y = 50 });
+        // try self.addTower(.{ .x = 0, .y = -50 });
 
         {
             const id = self.engine.ids.nextId();
@@ -228,7 +240,7 @@ const Game = struct {
 
     fn addTower(self: *Game, pos: Vec2) !void {
         const id = self.engine.ids.nextId();
-        const tower = Tower{ .range = 200, .fireDelay = 500, .missileSpeed = 100, .closestMonster = id };
+        const tower = Tower{ .range = 100, .fireDelay = 500, .missileSpeed = 100, .closestMonster = id };
         try self.towers.add(id, tower);
         try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
         // todo: no animation should be necessary for tower
@@ -236,7 +248,7 @@ const Game = struct {
         try self.sprites.add(id, self.resources.tower.sprite(0, 0, 0));
 
         const rangeId = self.engine.ids.nextId();
-        try self.engine.bounds.add(rangeId, Rect.initCentered(pos.x, pos.y, tower.range, tower.range));
+        try self.engine.bounds.add(rangeId, Rect.initCentered(pos.x, pos.y, tower.range * 2, tower.range * 2));
         try self.sprites.add(rangeId, try sdlZig.drawCircle(self.engine.renderer, tower.range));
     }
 
@@ -312,12 +324,12 @@ const Game = struct {
                 const mo = try self.engine.bounds.get(monsterEntry.id);
 
                 var towerIt = self.towers.iterator();
-                while (towerIt.next()) |towerEntry| {
-                    const to = try self.engine.bounds.get(towerEntry.id);
+                while (towerIt.next()) |*towerEntry| {
+                    const to = try self.engine.bounds.get(towerEntry.*.id);
                     const d = to.a.dist(mo.a);
-                    if (towerEntry.value.closestMonster == towerEntry.id or d < towerEntry.value.closestMonsterDistance) {
-                        towerEntry.value.closestMonster = monsterEntry.id;
-                        towerEntry.value.closestMonsterDistance = d;
+                    if (towerEntry.*.value.closestMonster == towerEntry.*.id or d < towerEntry.*.value.closestMonsterDistance) {
+                        towerEntry.*.value.closestMonster = monsterEntry.id;
+                        towerEntry.*.value.closestMonsterDistance = d;
                     }
                 }
             }
@@ -367,7 +379,8 @@ const Game = struct {
                 const tower = &entry.value;
 
                 if (tower.closestMonster == entry.id or
-                    ticks - tower.lastFire < tower.fireDelay)
+                    ticks - tower.lastFire < tower.fireDelay or
+                    tower.closestMonsterDistance > tower.range)
                 {
                     continue;
                 }
