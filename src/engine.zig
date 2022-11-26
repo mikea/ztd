@@ -43,13 +43,25 @@ pub const Text = struct {
 };
 
 pub const Engine = struct {
-    ids: IdManager = .{},
-    bounds: table.Table(Id, maxId, Rect) = undefined,
-    texts: table.Table(Id, maxId, Text) = undefined,
+    const BoundsTable = table.Table(Id, maxId, Rect);
+    // const BoundsTable = table.RTable(Id, maxId);
+    const TextsTable = table.Table(Id, maxId, Text);
 
-    pub fn init(self: *Engine, allocator: std.mem.Allocator, _: *sdl.SDL_Renderer) !void {
-        self.bounds = try @TypeOf(self.bounds).init(allocator);
-        self.texts = try @TypeOf(self.texts).init(allocator);
+    renderer: *sdl.SDL_Renderer,
+    bounds: BoundsTable,
+    texts: TextsTable,
+
+    ids: IdManager = .{},
+    running: bool = true,
+
+    pub fn init(allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !Engine {
+        try checkInt(sdl.SDL_SetRenderDrawBlendMode(renderer, sdl.SDL_BLENDMODE_BLEND));
+
+        return .{
+            .renderer = renderer,
+            .bounds = try BoundsTable.init(allocator),
+            .texts = try TextsTable.init(allocator),
+        };
     }
 
     pub fn deinit(self: *Engine) void {
@@ -57,23 +69,41 @@ pub const Engine = struct {
         self.texts.deinit();
     }
 
-    pub fn render(self: *Engine, renderer: *sdl.SDL_Renderer) !void {
-        try self.renderText(renderer);
+    pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
+        var event: sdl.SDL_Event = undefined;
+        while (sdl.SDL_PollEvent(&event) != 0) {
+            switch (event.type) {
+                sdl.SDL_QUIT => self.running = false,
+                sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
+                    sdl.SDLK_ESCAPE => self.running = false,
+                    else => {},
+                },
+                else => {},
+            }
+
+            return event;
+        }
+
+        return null;
     }
 
-    fn renderText(self: *Engine, renderer: *sdl.SDL_Renderer) !void {
+    pub fn render(self: *Engine) !void {
+        try self.renderText();
+    }
+
+    fn renderText(self: *Engine) !void {
         var it = self.texts.iterator();
         while (it.next()) |*entry| {
             var text = &entry.*.value;
 
             if (text.texture == null) {
-                text.texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(renderer, text.surface));
+                text.texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(self.renderer, text.surface));
             }
 
             const srcRect: sdl.SDL_Rect = .{ .x = 0, .y = 0, .w = text.surface.*.w, .h = text.surface.*.h, };
             const dstRect: sdl.SDL_Rect = .{ .x = @floatToInt(i32, text.pos.x), .y = @floatToInt(i32, text.pos.y), .w = text.surface.*.w, .h = text.surface.*.h, };
 
-            try checkInt(sdl.SDL_RenderCopy(renderer, text.texture, &srcRect, &dstRect));
+            try checkInt(sdl.SDL_RenderCopy(self.renderer, text.texture, &srcRect, &dstRect));
         }
     }
 

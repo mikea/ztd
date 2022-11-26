@@ -18,40 +18,13 @@ const sdlZig = @import("sdl.zig");
 const sdl = sdlZig.sdl;
 const checkNotNull = sdlZig.checkNotNull;
 const checkInt = sdlZig.checkInt;
+const Sprite = sdlZig.Sprite;
+const SpriteSheet = sdlZig.SpriteSheet;
 
 
 const AppError = error{
     NotImplementedError,
     ResourceError,
-};
-
-const SpriteSheet = struct {
-    texture: *sdl.SDL_Texture,
-    w: u16,
-    h: u16,
-
-    fn load(renderer: *sdl.SDL_Renderer, file: [*:0]const u8, w: u16, h: u16) !SpriteSheet {
-        const texture = try checkNotNull(sdl.SDL_Texture, sdl.IMG_LoadTexture(renderer, file));
-        return .{ .texture = texture, .w = w, .h = h };
-    }
-
-    fn deinit(self: *@This()) void {
-        sdl.SDL_DestroyTexture(self.texture);
-    }
-
-    const Coords = struct {
-        x: u16,
-        y: u16,
-    };
-
-    fn sprite(self: *@This(), x: u16, y: u16, angle: f64) Sprite {
-        return .{ .texture = self.texture, .src = sdl.SDL_Rect{
-            .x = x * self.w,
-            .y = y * self.h,
-            .w = self.w,
-            .h = self.h,
-        }, .angle = angle };
-    }
 };
 
 const Resources = struct {
@@ -88,16 +61,18 @@ const Statistics = struct {
     fpsId: Id = 0,
     monstersId: Id = 0,
     updateId: Id = 0,
+    monsterUpdateId: Id = 0,
     renderId: Id = 0,
 
     pub fn init(self: *Statistics) !void {
         self.fpsId = self.engine.ids.nextId();
         self.monstersId = self.engine.ids.nextId();
         self.updateId = self.engine.ids.nextId();
+        self.monsterUpdateId = self.engine.ids.nextId();
         self.renderId = self.engine.ids.nextId();
     }
 
-    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, monsterCount: usize, updateDuration: u64, renderDuration: u64) !void {
+    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, monsterCount: usize, updateDurationNs: u64, renderDuration: u64) !void {
         defer self.lastTicks = ticks;
 
         if (self.lastTicks == 0) {
@@ -110,11 +85,15 @@ const Statistics = struct {
         const monsters = try std.fmt.allocPrintZ(frameAllocator, "{} monsters", .{monsterCount});
         try self.engine.setText(self.monstersId, monsters, .{ .x = 0, .y = 20 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
-        const updateText = try std.fmt.allocPrintZ(frameAllocator, "{d} ms/update", .{ @intToFloat(f64, updateDuration) / 1000000});
+        const updateText = try std.fmt.allocPrintZ(frameAllocator, "{d:.0} ms/update", .{ @intToFloat(f64, updateDurationNs) / 1000000});
         try self.engine.setText(self.updateId, updateText, .{ .x = 0, .y = 40 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
-        const renderText = try std.fmt.allocPrintZ(frameAllocator, "{d} ms/render", .{ @intToFloat(f64, renderDuration) / 1000000});
-        try self.engine.setText(self.renderId, renderText, .{ .x = 0, .y = 60 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+        const nsPerMonster = @intToFloat(f64, updateDurationNs) / @intToFloat(f64, monsterCount);
+        const msMonsterText = try std.fmt.allocPrintZ(frameAllocator, "{e:.0} monsters/sec", .{ 1.0e9 / nsPerMonster});
+        try self.engine.setText(self.monsterUpdateId, msMonsterText, .{ .x = 0, .y = 60 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+
+        const renderText = try std.fmt.allocPrintZ(frameAllocator, "{d:.0} ms/render", .{ @intToFloat(f64, renderDuration) / 1000000});
+        try self.engine.setText(self.renderId, renderText, .{ .x = 0, .y = 80 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
     }
 };
 
@@ -124,11 +103,14 @@ const Health = struct {
 };
 
 const Tower = struct {
+    range: f32,
     fireDelay: u64,
     missileSpeed: f32,
     lastFire: u64 = 0,
     closestMonster: Id, // equals to itself when no monster is found.
-    closestMonsterDistance: f32 = 0,
+
+    // todo: remove
+    closestMonsterDistance: f32 = std.math.f32_max,
 };
 
 const Monster = struct {
@@ -140,12 +122,6 @@ const Projectile = struct {
     target: Id,
 };
 
-const Sprite = struct {
-    texture: *sdl.SDL_Texture,
-    src: sdl.SDL_Rect,
-    angle: f64,
-};
-
 const Animation = struct {
     sheet: *SpriteSheet,
     sprites: []const SpriteSheet.Coords,
@@ -155,29 +131,29 @@ const Animation = struct {
 };
 
 const Game = struct {
+    const MonstersTable = Table(Id, maxId, Monster);
+
     displaySize: Vec2,
+    engine: *engine.Engine,
 
     lastTicks: u32 = 0,
     lastUpdateDuration: u64 = 0,
     lastRenderDuration: u64 = 0,
-    engine: engine.Engine = .{},
     statistics: Statistics = undefined,
 
     view: Rect = undefined,
     resources: Resources = undefined,
     healths: Table(Id, maxId, Health) = undefined,
     towers: Table(Id, maxId, Tower) = undefined,
-    monsters: Table(Id, maxId, Monster) = undefined,
+    monsters: MonstersTable = undefined,
     projectiles: Table(Id, maxId, Projectile) = undefined,
     sprites: Table(Id, maxId, Sprite) = undefined,
     animations: Table(Id, maxId, Animation) = undefined,
 
     fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !void {
         self.resources = try Resources.init(renderer);
-        self.statistics = .{ .engine = &self.engine, .resources = &self.resources };
+        self.statistics = .{ .engine = self.engine, .resources = &self.resources };
         try self.statistics.init();
-
-        try self.engine.init(allocator, renderer);
 
         self.healths = try @TypeOf(self.healths).init(allocator);
         self.towers = try @TypeOf(self.towers).init(allocator);
@@ -214,10 +190,10 @@ const Game = struct {
             }
         }
 
-        try self.addTower(.{ .x = -15, .y = 0 });
-        try self.addTower(.{ .x = 15, .y = 0 });
-        try self.addTower(.{ .x = 0, .y = 15 });
-        try self.addTower(.{ .x = 0, .y = -15 });
+        try self.addTower(.{ .x = -50, .y = 0 });
+        try self.addTower(.{ .x = 50, .y = 0 });
+        try self.addTower(.{ .x = 0, .y = 50 });
+        try self.addTower(.{ .x = 0, .y = -50 });
 
         {
             const id = self.engine.ids.nextId();
@@ -252,11 +228,16 @@ const Game = struct {
 
     fn addTower(self: *Game, pos: Vec2) !void {
         const id = self.engine.ids.nextId();
-        try self.towers.add(id, .{ .fireDelay = 500, .missileSpeed = 300, .closestMonster = id });
+        const tower = Tower{ .range = 200, .fireDelay = 500, .missileSpeed = 100, .closestMonster = id };
+        try self.towers.add(id, tower);
         try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
         // todo: no animation should be necessary for tower
         try self.engine.bounds.add(id, Rect.initCentered(pos.x, pos.y, 8, 8));
         try self.sprites.add(id, self.resources.tower.sprite(0, 0, 0));
+
+        const rangeId = self.engine.ids.nextId();
+        try self.engine.bounds.add(rangeId, Rect.initCentered(pos.x, pos.y, tower.range, tower.range));
+        try self.sprites.add(rangeId, try sdlZig.drawCircle(self.engine.renderer, tower.range));
     }
 
     fn event(self: *Game, evt: *const sdl.SDL_Event) void {
@@ -276,6 +257,41 @@ const Game = struct {
                 self.view = Rect.centered(self.view.center(), self.view.size().mul(z));
             },
             else => {},
+        }
+    }
+
+    fn updateClosestMonsters2(self: *Game) !void {
+        {
+            // update closest monsters
+            var it = self.towers.iterator();
+            while (it.next()) |entry| {
+                const tower = entry.value;
+                const pos = (try self.engine.bounds.get(entry.id)).center();
+
+                var collector: struct {
+                    monsters: *MonstersTable,
+                    pos: Vec2,
+                    closestId: Id,
+                    closestDistance: f32,
+
+                    pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
+                        if (s.monsters.find(id) == null) {
+                            return;
+                        }
+
+                        const d = s.pos.dist(rect.center());
+                        if (d < s.closestDistance) {
+                            s.closestDistance = d;
+                            s.closestId = id;
+                        }
+                    }
+                } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.id, .closestDistance = std.math.f32_max};
+
+                try self.engine.bounds.findIntersect(Rect.centered(pos, .{.x = tower.range, .y = tower.range}), @TypeOf(collector), &collector, @TypeOf(collector).callback);
+
+                entry.value.closestMonster = collector.closestId;
+                // entry.value.closestMonsterDistance = std.math.floatMax(f32);
+            }
         }
     }
 
@@ -322,7 +338,7 @@ const Game = struct {
             const n = d.norm();
             if (n > 1.0e-2) {
                 const dn = d.mul(entry.value.speed * dt / n);
-                o.* = o.translate(dn);
+                try self.engine.bounds.update(entry.id, o.translate(dn));
             }
         }
     }
@@ -359,11 +375,10 @@ const Game = struct {
                 tower.lastFire = ticks;
                 const id = self.engine.ids.nextId();
                 try self.projectiles.add(id, .{ .target = tower.closestMonster, .v = tower.missileSpeed });
-                // todo: no animation should not be necessary for projectile
-                const pos = try self.engine.bounds.get(entry.id);
+                const pos = (try self.engine.bounds.get(entry.id)).center();
                 try self.engine.bounds.add(id, Rect.initCentered(
-                    pos.a.x,
-                    pos.a.y,
+                    pos.x,
+                    pos.y,
                     8,
                     8,
                 ));
@@ -400,8 +415,7 @@ const Game = struct {
                 }
 
                 const dn = dir.mul(ds / n);
-                projectile.* = projectile.translate(dn);
-
+                try self.engine.bounds.update(entry.id, projectile.translate(dn));
                 (try self.sprites.get(entry.id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
             }
 
@@ -472,7 +486,7 @@ const Game = struct {
             }
         }
  
-        try self.engine.render(renderer);
+        try self.engine.render();
     }
 };
 
@@ -506,30 +520,27 @@ pub fn main() !void {
     var renderer = try checkNotNull(sdl.SDL_Renderer, sdl.SDL_CreateRenderer(window, -1, sdl.SDL_RENDERER_ACCELERATED | sdl.SDL_RENDERER_PRESENTVSYNC));
     defer sdl.SDL_DestroyRenderer(renderer);
 
+    var eng = try engine.Engine.init(allocator, renderer);
     var game: Game = .{
         .displaySize = .{ .x = @intToFloat(f32, displayMode.w), .y = @intToFloat(f32, displayMode.h) },
+        .engine = &eng,
     };
     try game.init(allocator, renderer);
     defer game.deinit();
 
     // main loop
 
-    mainloop: while (true) {
+    while (true) {
+        if (eng.nextEvent()) |event| {
+            game.event(&event);
+        }
+        if (!eng.running) {
+            break;
+        }
+
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const frameAllocator = arena.allocator();
-
-        var event: sdl.SDL_Event = undefined;
-        while (sdl.SDL_PollEvent(&event) != 0) {
-            switch (event.type) {
-                sdl.SDL_QUIT => break :mainloop,
-                sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
-                    sdl.SDLK_ESCAPE => break :mainloop,
-                    else => game.event(&event),
-                },
-                else => game.event(&event),
-            }
-        }
         try game.update(frameAllocator, sdl.SDL_GetTicks());
         try game.render(renderer);
         sdl.SDL_RenderPresent(renderer);

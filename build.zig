@@ -9,13 +9,18 @@ pub fn build(b: *std.build.Builder) void {
     exe.setBuildMode(mode);
 
     {
-        // setup sdl2
+        exe.linkLibC();
+
         exe.addIncludePath("/usr/include");
         exe.addIncludePath("/usr/include/x86_64-linux-gnu");
+
+        // setup sdl2
         exe.linkSystemLibrary("sdl2");
         exe.linkSystemLibrary("sdl2_ttf");
         exe.linkSystemLibrary("sdl2_image");
-        exe.linkLibC();
+        
+        // cairo for drawing
+        exe.linkSystemLibrary("cairo");
     }
 
     {

@@ -123,11 +123,11 @@ pub const Rect = struct {
 
     // union is taken
     pub fn add(self: *const Rect, r: Rect) Rect {
-        return .{ .a = self.a.min(r.a), .b = self.b.max(r.b) };
+        return .{ .a = .{.x =  std.math.min(self.a.x, r.a.x), .y =  std.math.min(self.a.y, r.a.y)}, .b = .{.x =  std.math.max(self.b.x, r.b.x), .y =  std.math.max(self.b.y, r.b.y)} };
     }
 
     pub fn area(self: *const Rect) f32 {
-        return self.size().area();
+        return (self.b.x - self.a.x) * (self.b.y - self.a.y);
     }
 
     pub fn format(
