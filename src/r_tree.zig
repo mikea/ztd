@@ -9,7 +9,6 @@ const Rect = geom.Rect;
 const inf = std.math.inf_f32;
 const assert = std.debug.assert;
 
-
 var prng = std.rand.DefaultPrng.init(0);
 const random = prng.random();
 
@@ -91,7 +90,7 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
                 self.len -= 1;
                 return;
             }
-            
+
             self.items.leaf[idx] = self.items.leaf[self.len - 1];
             self.len -= 1;
         }
@@ -162,22 +161,69 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
             }
         }
 
-        fn findLeaf(self: *@This(), id: Id, rect: Rect) ?struct { leaf: *This, idx: usize } {
-            switch (self.items) {
-                .leaf => |*entries| for (entries[0..self.len]) |*entry, i| {
-                    if (entry.id == id) {
-                        return .{ .leaf = self, .idx = i };
-                    }
-                },
-                .middle => |*children| for (children[0..self.len]) |child| {
-                    if (child.rect.intersects(rect)) {
-                        if (child.findLeaf(id, rect)) |leaf| {
-                            return leaf;
+        fn findLeaf(start: *This, id: Id, rect: Rect) ?struct { leaf: *This, idx: usize } {
+            var stack: [10]struct { node: *This, i: usize } = undefined;
+            var len: usize = 1;
+            stack[0] = .{ .node = start, .i = 0 };
+
+            outer: while (len > 0) {
+                var top = &stack[len - 1];
+                var node = top.node;
+
+                switch (node.items) {
+                    .leaf => |*entries| {
+                        for (entries[0..node.len]) |*entry, i| {
+                            if (entry.id == id) {
+                                return .{ .leaf = node, .idx = i };
+                            }
                         }
-                    }
-                },
+                    },
+                    .middle => |*children| {
+                        while (top.i < node.len) {
+                            var child = children[top.i];
+                            top.i += 1;
+                            if (!child.rect.intersects(rect)) continue;
+
+                            switch (child.items) {
+                                .leaf => |*entries| for (entries[0..child.len]) |*entry, i| {
+                                    if (entry.id == id) {
+                                        return .{ .leaf = child, .idx = i };
+                                    }
+                                },
+
+                                .middle => {
+                                    // push new child to the stack and process it
+                                    stack[len] = .{ .node = child, .i = 0 };
+                                    len += 1;
+                                    continue :outer;
+                                },
+                            }
+                        }
+                    },
+                }
+
+                // pop item off
+                len -= 1;
             }
+
             return null;
+
+            // old recursive version which wasn't really slower.
+            // switch (self.items) {
+            //     .leaf => |*entries| for (entries[0..self.len]) |*entry, i| {
+            //         if (entry.id == id) {
+            //             return .{ .leaf = self, .idx = i };
+            //         }
+            //     },
+            //     .middle => |*children| for (children[0..self.len]) |child| {
+            //         if (child.rect.intersects(rect)) {
+            //             if (child.findLeaf(id, rect)) |leaf| {
+            //                 return leaf;
+            //             }
+            //         }
+            //     },
+            // }
+            // return null;
         }
     };
 
@@ -236,7 +282,7 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
             };
 
             // need to compare to original rect to handle well the case when bounds are in a line.
-            var rects = [_]Rect { result[0].rect, result[1].rect };
+            var rects = [_]Rect{ result[0].rect, result[1].rect };
 
             // add the rest
             for (items) |item, i| {
