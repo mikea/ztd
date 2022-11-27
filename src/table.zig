@@ -54,7 +54,7 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
 pub fn RTable(comptime Id: type, comptime maxId: Id) type {
     return struct {
         const Set = SparseSet(Id, maxId, Rect);
-        const Tree = RTree(Id, 300, 100);
+        const Tree = RTree(Id, maxId, 300, 100);
 
         pub const Entry = Set.Entry;
         // pub const Iterator = Set.Iterator;
@@ -90,9 +90,8 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
         }
 
         pub fn update(self: *@This(), id: Id, t: Rect) !void {
-            const oldRect = try self.get(id);
             try self.set.add(id, t);
-            try self.tree.update(id, oldRect, t);
+            try self.tree.update(id, t);
         }
 
         pub fn findIntersect(self: *const @This(), rect: Rect, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
