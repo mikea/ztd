@@ -196,7 +196,6 @@ const Game = struct {
         {
             // init towers
             const id = self.engine.ids.nextId();
-            std.log.err("first tower id: {}", .{id});
             var i: i32 = -10000;
             while (i <= 10000) {
                 try self.addTower(.{ .x = @intToFloat(f32, i), .y = 0 });
