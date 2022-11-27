@@ -108,9 +108,6 @@ const Tower = struct {
     missileSpeed: f32,
     lastFire: u64 = 0,
     closestMonster: Id, // equals to itself when no monster is found.
-
-    // todo: remove
-    closestMonsterDistance: f32 = std.math.f32_max,
 };
 
 const Monster = struct {
@@ -240,7 +237,7 @@ const Game = struct {
 
     fn addTower(self: *Game, pos: Vec2) !void {
         const id = self.engine.ids.nextId();
-        const tower = Tower{ .range = 100, .fireDelay = 500, .missileSpeed = 100, .closestMonster = id };
+        const tower = Tower{ .range = 100, .fireDelay = 200, .missileSpeed = 500, .closestMonster = id };
         try self.towers.add(id, tower);
         try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
         // todo: no animation should be necessary for tower
@@ -297,16 +294,13 @@ const Game = struct {
                         if (d < s.closestDistance) {
                             s.closestDistance = d;
                             s.closestId = id;
-// std.log.err("found: {} {} {?}", .{id, rect, s.monsters.find(id)});
                         }
                     }
                 } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.*.id, .closestDistance = std.math.f32_max};
 
                 try self.engine.bounds.findIntersect(Rect.centered(pos, .{.x = tower.range * 2, .y = tower.range * 2}), @TypeOf(collector), &collector, @TypeOf(collector).callback);
 
-// std.log.err("collector: {} {}", .{collector.iter, collector.closestDistance});
                 entry.*.value.closestMonster = collector.closestId;
-                entry.*.value.closestMonsterDistance = collector.closestDistance;
             }
         }
     }
@@ -389,9 +383,9 @@ const Game = struct {
                     continue;
                 }
 
-                // const target = try self.engine.bounds.get(tower.closestMonster);
-                // const d = pos.dist(target.center());
-                if (tower.closestMonsterDistance > tower.range) {
+                const target = try self.engine.bounds.get(tower.closestMonster);
+                const d = pos.dist(target.center());
+                if (d > tower.range) {
                     continue;
                 }
 
