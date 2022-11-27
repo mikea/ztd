@@ -43,8 +43,7 @@ pub const Text = struct {
 };
 
 pub const Engine = struct {
-    const BoundsTable = table.Table(Id, maxId, Rect);
-    // const BoundsTable = table.RTable(Id, maxId);
+    const BoundsTable = table.RTable(Id, maxId);
     const TextsTable = table.Table(Id, maxId, Text);
 
     renderer: *sdl.SDL_Renderer,

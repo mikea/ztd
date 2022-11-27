@@ -115,7 +115,7 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
             while (true) {
                 switch (node.items) {
                     .leaf => return node,
-                    .middle => |children| node = chooseNode(children[0..node.len], rect),
+                    .middle => |*children| node = chooseNode(children[0..node.len], rect),
                 }
             }
         }
@@ -164,12 +164,12 @@ pub fn RTree(comptime Id: type, comptime leafSize: usize, comptime middleSize: u
 
         fn findLeaf(self: *@This(), id: Id, rect: Rect) ?struct { leaf: *This, idx: usize } {
             switch (self.items) {
-                .leaf => |entries| for (entries[0..self.len]) |entry, i| {
+                .leaf => |*entries| for (entries[0..self.len]) |*entry, i| {
                     if (entry.id == id) {
                         return .{ .leaf = self, .idx = i };
                     }
                 },
-                .middle => |children| for (children[0..self.len]) |child| {
+                .middle => |*children| for (children[0..self.len]) |child| {
                     if (child.rect.intersects(rect)) {
                         if (child.findLeaf(id, rect)) |leaf| {
                             return leaf;

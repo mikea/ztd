@@ -195,6 +195,8 @@ const Game = struct {
 
         {
             // init towers
+            const id = self.engine.ids.nextId();
+            std.log.err("first tower id: {}", .{id});
             var i: i32 = -10000;
             while (i <= 10000) {
                 try self.addTower(.{ .x = @intToFloat(f32, i), .y = 0 });
@@ -276,33 +278,37 @@ const Game = struct {
         {
             // update closest monsters
             var it = self.towers.iterator();
-            while (it.next()) |entry| {
-                const tower = entry.value;
-                const pos = (try self.engine.bounds.get(entry.id)).center();
+            while (it.next()) |*entry| {
+                const tower = entry.*.value;
+                const pos = (try self.engine.bounds.get(entry.*.id)).center();
 
                 var collector: struct {
                     monsters: *MonstersTable,
                     pos: Vec2,
                     closestId: Id,
                     closestDistance: f32,
+                    iter: usize = 0,
 
                     pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
                         if (s.monsters.find(id) == null) {
                             return;
                         }
 
+                        s.iter += 1;
                         const d = s.pos.dist(rect.center());
                         if (d < s.closestDistance) {
                             s.closestDistance = d;
                             s.closestId = id;
+// std.log.err("found: {} {} {?}", .{id, rect, s.monsters.find(id)});
                         }
                     }
-                } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.id, .closestDistance = std.math.f32_max};
+                } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.*.id, .closestDistance = std.math.f32_max};
 
-                try self.engine.bounds.findIntersect(Rect.centered(pos, .{.x = tower.range, .y = tower.range}), @TypeOf(collector), &collector, @TypeOf(collector).callback);
+                try self.engine.bounds.findIntersect(Rect.centered(pos, .{.x = tower.range * 2, .y = tower.range * 2}), @TypeOf(collector), &collector, @TypeOf(collector).callback);
 
-                entry.value.closestMonster = collector.closestId;
-                // entry.value.closestMonsterDistance = std.math.floatMax(f32);
+// std.log.err("collector: {} {}", .{collector.iter, collector.closestDistance});
+                entry.*.value.closestMonster = collector.closestId;
+                entry.*.value.closestMonsterDistance = collector.closestDistance;
             }
         }
     }
@@ -370,25 +376,30 @@ const Game = struct {
     }
 
     fn updateTowers(self: *Game, ticks: u32) !void {
-        try self.updateClosestMonsters();
+        try self.updateClosestMonsters2();
 
         {
             // fire from towers
             var it = self.towers.iterator();
             while (it.next()) |entry| {
                 const tower = &entry.value;
+                const pos = (try self.engine.bounds.get(entry.id)).center();
 
                 if (tower.closestMonster == entry.id or
-                    ticks - tower.lastFire < tower.fireDelay or
-                    tower.closestMonsterDistance > tower.range)
+                    ticks - tower.lastFire < tower.fireDelay )
                 {
+                    continue;
+                }
+
+                // const target = try self.engine.bounds.get(tower.closestMonster);
+                // const d = pos.dist(target.center());
+                if (tower.closestMonsterDistance > tower.range) {
                     continue;
                 }
 
                 tower.lastFire = ticks;
                 const id = self.engine.ids.nextId();
                 try self.projectiles.add(id, .{ .target = tower.closestMonster, .v = tower.missileSpeed });
-                const pos = (try self.engine.bounds.get(entry.id)).center();
                 try self.engine.bounds.add(id, Rect.initCentered(
                     pos.x,
                     pos.y,
@@ -484,7 +495,7 @@ const Game = struct {
         while (it.next()) |entry| {
             const sprite = entry.value;
             const o = try self.engine.bounds.get(entry.id);
-            if (self.view.intersects(o.*)) {
+            if (self.view.intersects(o)) {
                 const a = o.a.add(translation).mul(scale);
                 const size = o.size().mul(scale);
 
