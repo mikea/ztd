@@ -16,6 +16,10 @@ pub const Vec2 = struct {
         return minus(to, from).norm();
     }
 
+    pub fn dist2(from: Vec2, to: Vec2) f32 {
+        return minus(to, from).norm2();
+    }
+
     fn dir(from: Vec2, to: Vec2) Vec2 {
         return minus(to, from).normalized();
     }
@@ -26,6 +30,10 @@ pub const Vec2 = struct {
 
     pub fn norm(self: *const Vec2) f32 {
         return @sqrt(self.x * self.x + self.y * self.y);
+    }
+
+    pub fn norm2(self: *const Vec2) f32 {
+        return self.x * self.x + self.y * self.y;
     }
 
     fn normalized(self: *const Vec2) Vec2 {

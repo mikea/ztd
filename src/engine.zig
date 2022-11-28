@@ -7,6 +7,7 @@ const sdlZig = @import("sdl.zig");
 const sdl = sdlZig.sdl;
 const checkNotNull = sdlZig.checkNotNull;
 const checkInt = sdlZig.checkInt;
+const Sprite = sdlZig.Sprite;
 
 
 const Vec = geom.Vec2;
@@ -45,10 +46,12 @@ pub const Text = struct {
 pub const Engine = struct {
     const BoundsTable = table.RTable(Id, maxId);
     const TextsTable = table.Table(Id, maxId, Text);
+    const SpritesTable = table.Table(Id, maxId, Sprite);
 
     renderer: *sdl.SDL_Renderer,
     bounds: BoundsTable,
     texts: TextsTable,
+    sprites: SpritesTable,
 
     ids: IdManager = .{},
     running: bool = true,
@@ -60,12 +63,14 @@ pub const Engine = struct {
             .renderer = renderer,
             .bounds = try BoundsTable.init(allocator),
             .texts = try TextsTable.init(allocator),
+            .sprites = try SpritesTable.init(allocator),
         };
     }
 
     pub fn deinit(self: *Engine) void {
         self.bounds.deinit();
         self.texts.deinit();
+        self.sprites.deinit();
     }
 
     pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
