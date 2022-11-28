@@ -3,10 +3,9 @@ const table = @import("table.zig");
 const geom = @import("geom.zig");
 const buildOptions = @import("build_options");
 const engine = @import("engine.zig");
+const Game = @import("game.zig").Game;
 
-const Table = table.Table;
 const Id = engine.Id;
-const maxId = engine.maxId;
 
 const Vec2 = geom.Vec2;
 const Rect = geom.Rect;
@@ -21,37 +20,13 @@ const checkInt = sdlZig.checkInt;
 const Sprite = sdlZig.Sprite;
 const SpriteSheet = sdlZig.SpriteSheet;
 
+const Resources = @import("resources.zig").Resources;
 
 const AppError = error{
     NotImplementedError,
     ResourceError,
 };
 
-const Resources = struct {
-    redDemon: SpriteSheet,
-    tower: SpriteSheet,
-    fireballProjectile: SpriteSheet,
-    woodKeep: SpriteSheet,
-    rubik20: *sdl.TTF_Font,
-
-    fn init(renderer: *sdl.SDL_Renderer) !Resources {
-        return .{
-            .redDemon = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16),
-            .tower = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16),
-            .fireballProjectile = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16),
-            .woodKeep = try SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Keep.png", 32, 32),
-            .rubik20 = try checkNotNull(sdl.TTF_Font, sdl.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
-        };
-    }
-
-    fn deinit(self: *@This()) void {
-        self.redDemon.deinit();
-        self.tower.deinit();
-        self.fireballProjectile.deinit();
-        self.woodKeep.deinit();
-        sdl.TTF_CloseFont(self.rubik20);
-    }
-};
 
 const Statistics = struct {
     engine: *engine.Engine,
@@ -72,7 +47,7 @@ const Statistics = struct {
         self.renderId = self.engine.ids.nextId();
     }
 
-    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, monsterCount: usize, updateDurationNs: u64, renderDuration: u64) !void {
+    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, game: *Game, updateDurationNs: u64, renderDuration: u64) !void {
         defer self.lastTicks = ticks;
 
         if (self.lastTicks == 0) {
@@ -82,358 +57,18 @@ const Statistics = struct {
         const fps = try std.fmt.allocPrintZ(frameAllocator, "{d} fps", .{1000 / (ticks - self.lastTicks)});
         try self.engine.setText(self.fpsId, fps, .{ .x = 0, .y = 0 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
-        const monsters = try std.fmt.allocPrintZ(frameAllocator, "{} monsters", .{monsterCount});
+        const monsters = try std.fmt.allocPrintZ(frameAllocator, "{} monsters", .{game.monsters.size()});
         try self.engine.setText(self.monstersId, monsters, .{ .x = 0, .y = 20 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
         const updateText = try std.fmt.allocPrintZ(frameAllocator, "{d:.0} ms/update", .{ @intToFloat(f64, updateDurationNs) / 1000000});
         try self.engine.setText(self.updateId, updateText, .{ .x = 0, .y = 40 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
-        const nsPerMonster = @intToFloat(f64, updateDurationNs) / @intToFloat(f64, monsterCount);
+        const nsPerMonster = @intToFloat(f64, updateDurationNs) / @intToFloat(f64, game.monsters.size());
         const msMonsterText = try std.fmt.allocPrintZ(frameAllocator, "{e:.0} monsters/sec", .{ 1.0e9 / nsPerMonster});
         try self.engine.setText(self.monsterUpdateId, msMonsterText, .{ .x = 0, .y = 60 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
         const renderText = try std.fmt.allocPrintZ(frameAllocator, "{d:.0} ms/render", .{ @intToFloat(f64, renderDuration) / 1000000});
         try self.engine.setText(self.renderId, renderText, .{ .x = 0, .y = 80 }, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-    }
-};
-
-const Health = struct {
-    maxHealth: u32,
-    health: u32,
-};
-
-const Tower = struct {
-    range: f32,
-    fireDelay: u64,
-    missileSpeed: f32,
-    lastFire: u64 = 0,
-    targetMonster: Id, // equals to itself when no monster is found.
-};
-
-const Monster = struct {
-    speed: f32,
-    targetTower: Id,
-};
-
-const Projectile = struct {
-    v: f32,
-    target: Id,
-};
-
-const Animation = struct {
-    sheet: *SpriteSheet,
-    sprites: []const SpriteSheet.Coords,
-    animationDelay: u32,
-    i: usize = 0,
-    lastFrame: u64 = 0,
-};
-
-const Game = struct {
-    const MonstersTable = Table(Id, maxId, Monster);
-
-    engine: *engine.Engine,
-
-    lastTicks: u32 = 0,
-    lastUpdateDuration: u64 = 0,
-    lastRenderDuration: u64 = 0,
-    statistics: Statistics = undefined,
-
-    resources: Resources = undefined,
-    healths: Table(Id, maxId, Health) = undefined,
-    towers: Table(Id, maxId, Tower) = undefined,
-    monsters: MonstersTable = undefined,
-    projectiles: Table(Id, maxId, Projectile) = undefined,
-    animations: Table(Id, maxId, Animation) = undefined,
-
-    fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !void {
-        self.resources = try Resources.init(renderer);
-        self.statistics = .{ .engine = self.engine, .resources = &self.resources };
-        try self.statistics.init();
-
-        self.healths = try @TypeOf(self.healths).init(allocator);
-        self.towers = try @TypeOf(self.towers).init(allocator);
-        self.monsters = try @TypeOf(self.monsters).init(allocator);
-        self.projectiles = try @TypeOf(self.projectiles).init(allocator);
-        self.animations = try @TypeOf(self.animations).init(allocator);
-
-        {
-            // init monsters
-            const grid = 200;
-            const step = 20;
-
-            var i: i32 = -grid + 1;
-            while (i < grid) : (i += 1) {
-                var j: i32 = -grid + 1;
-                while (j < grid) : (j += 1) {
-                    if (j < 5 and j > -5) {
-                        continue;
-                    }
-                    const id = self.engine.ids.nextId();
-                    try self.monsters.add(id, .{ .speed = 5, .targetTower = id });
-                    try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-                    try self.engine.bounds.add(id, Rect.initCentered(@intToFloat(f32, i) * step, @intToFloat(f32, j) * step, 8, 8));
-                    try self.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]SpriteSheet.Coords{
-                        .{ .x = 2, .y = 0 },
-                        .{ .x = 3, .y = 0 },
-                        .{ .x = 4, .y = 0 },
-                        .{ .x = 3, .y = 0 },
-                    } });
-                }
-            }
-        }
-
-        {
-            // init towers
-            var i: i32 = -10000;
-            while (i <= 10000) {
-                try self.addTower(.{ .x = @intToFloat(f32, i), .y = 0 });
-                i += 100;
-            }
-        }
-
-        // try self.addTower(.{ .x = -50, .y = 0 });
-        // try self.addTower(.{ .x = 50, .y = 0 });
-        // try self.addTower(.{ .x = 0, .y = 50 });
-        // try self.addTower(.{ .x = 0, .y = -50 });
-
-        {
-            const id = self.engine.ids.nextId();
-
-            // add keep
-            try self.engine.bounds.add(id, Rect.initCentered(0, 0, 16, 16));
-            try self.engine.sprites.add(id, self.resources.woodKeep.sprite(0, 0, 0));
-        }
-    }
-
-    fn deinit(self: *Game) void {
-        self.resources.deinit();
-        self.engine.deinit();
-
-        self.healths.deinit();
-        self.monsters.deinit();
-        self.towers.deinit();
-        self.projectiles.deinit();
-        self.engine.sprites.deinit();
-        self.animations.deinit();
-    }
-
-    fn delete(self: *Game, id: Id) !void {
-        try self.engine.bounds.delete(id);
-        try self.engine.sprites.delete(id);
-        try self.healths.delete(id);
-        try self.monsters.delete(id);
-        try self.towers.delete(id);
-        try self.projectiles.delete(id);
-        try self.animations.delete(id);
-    }
-
-    fn addTower(self: *Game, pos: Vec2) !void {
-        const id = self.engine.ids.nextId();
-        const tower = Tower{ .range = 100, .fireDelay = 500, .missileSpeed = 500, .targetMonster = id };
-        try self.towers.add(id, tower);
-        try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-        // todo: no animation should be necessary for tower
-        try self.engine.bounds.add(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-        try self.engine.sprites.add(id, self.resources.tower.sprite(0, 0, 0));
-
-        const rangeId = self.engine.ids.nextId();
-        try self.engine.bounds.add(rangeId, Rect.initCentered(pos.x, pos.y, tower.range * 2, tower.range * 2));
-        try self.engine.sprites.add(rangeId, try sdlZig.drawCircle(self.engine.renderer, tower.range));
-    }
-
-    fn event(_: *Game, _: *const sdl.SDL_Event) void {
-    }
-
-    fn updateTowerTargets(self: *Game) !void {
-        {
-            // update closest monsters
-            var it = self.towers.iterator();
-            while (it.next()) |*entry| {
-                const tower = entry.*.value;
-                const pos = (try self.engine.bounds.get(entry.*.id)).center();
-
-                var collector: struct {
-                    monsters: *MonstersTable,
-                    pos: Vec2,
-                    closestId: Id,
-                    closestDistance: f32,
-                    iter: usize = 0,
-
-                    pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
-                        if (s.monsters.find(id) == null) {
-                            return;
-                        }
-
-                        s.iter += 1;
-                        const d = s.pos.dist(rect.center());
-                        if (d < s.closestDistance) {
-                            s.closestDistance = d;
-                            s.closestId = id;
-                        }
-                    }
-                } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.*.id, .closestDistance = std.math.f32_max};
-
-                try self.engine.bounds.findIntersect(Rect.centered(pos, .{.x = tower.range * 2, .y = tower.range * 2}), @TypeOf(collector), &collector, @TypeOf(collector).callback);
-                entry.*.value.targetMonster = collector.closestId;
-            }
-        }
-    }
-
-
-    fn updateMonsters(self: *Game, ticks: u32) !void {
-        const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
-
-        // update state
-        var it = self.monsters.iterator();
-        while (it.next()) |*entry| {
-            const monster = &entry.*.value;
-            const bound = try self.engine.bounds.get(entry.*.id);
-            const loc = bound.center();
-
-            if (self.towers.find(monster.targetTower) == null) {
-                // find closest tower
-                // todo: make this faster
-
-                var closestD: f32 = std.math.f32_max;
-                var towerIt = self.towers.iterator();
-                while (towerIt.next()) |*towerEntry| {
-                    var towerLoc = (try self.engine.bounds.get(towerEntry.*.id)).center();
-                    var d = loc.dist2(towerLoc);
-                    if (d < closestD) {
-                        monster.targetTower = towerEntry.*.id;
-                        closestD = d;
-                    }
-                }
-            }
-
-            const targetLoc = (try self.engine.bounds.get(monster.targetTower)).center();
-            const d = Vec2.minus(targetLoc, loc);
-            const n = d.norm();
-            if (n > 1.0e-2) {
-                const dn = d.mul(entry.*.value.speed * dt / n);
-                try self.engine.bounds.update(entry.*.id, bound.translate(dn));
-            }
-        }
-    }
-
-    fn updateAnimations(self: *Game, ticks: u32) !void {
-        // advance animation
-        var it = self.animations.iterator();
-        while (it.next()) |entry| {
-            const animation = &entry.value;
-            if (ticks - animation.lastFrame > animation.animationDelay) {
-                animation.i = (animation.i + 1) % animation.sprites.len;
-                animation.lastFrame = ticks;
-            }
-            const coords = animation.sprites[animation.i];
-            try self.engine.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y, 0));
-        }
-    }
-
-    fn updateTowers(self: *Game, ticks: u32) !void {
-        try self.updateTowerTargets();
-
-        {
-            // fire from towers
-            var it = self.towers.iterator();
-            while (it.next()) |entry| {
-                const tower = &entry.value;
-                const pos = (try self.engine.bounds.get(entry.id)).center();
-
-                if (tower.targetMonster == entry.id or
-                    ticks - tower.lastFire < tower.fireDelay )
-                {
-                    continue;
-                }
-
-                const target = try self.engine.bounds.get(tower.targetMonster);
-                const d = pos.dist(target.center());
-                if (d > tower.range) {
-                    continue;
-                }
-
-                tower.lastFire = ticks;
-                const id = self.engine.ids.nextId();
-                try self.projectiles.add(id, .{ .target = tower.targetMonster, .v = tower.missileSpeed });
-                try self.engine.bounds.add(id, Rect.initCentered(
-                    pos.x,
-                    pos.y,
-                    8,
-                    8,
-                ));
-                try self.engine.sprites.add(id, self.resources.fireballProjectile.sprite(0, 0, 90));
-            }
-        }
-    }
-
-    fn updateProjectiles(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
-        {
-            // move projectiles
-            const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
-            var toDelete = try SparseSet(Id, maxId, void).init(frameAllocator);
-            defer toDelete.deinit();
-
-            var it = self.projectiles.iterator();
-            while (it.next()) |entry| {
-                // std.log.debug("projection entry: {}", .{entry});
-                const projectile = try self.engine.bounds.get(entry.id);
-                const target = self.engine.bounds.find(entry.value.target) orelse {
-                    // this projectile's target doesn't exist anymore, delete it.
-                    try toDelete.add(entry.id, {});
-                    continue;
-                };
-
-                const ds = entry.value.v * dt;
-
-                const dir = target.value.a.minus(projectile.a);
-                const n = dir.norm();
-                if (n < ds) {
-                    try toDelete.add(entry.value.target, {});
-                    try toDelete.add(entry.id, {});
-                    continue;
-                }
-
-                const dn = dir.mul(ds / n);
-                try self.engine.bounds.update(entry.id, projectile.translate(dn));
-                (try self.engine.sprites.get(entry.id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
-            }
-
-            var toDeleteIt = toDelete.iterator();
-            while (toDeleteIt.next()) |entry| {
-                // std.log.debug("deleting: {}", .{entry.id});
-                try self.delete(entry.id);
-            }
-        }
-    }
-
-    fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
-        var timer = try std.time.Timer.start();
-        defer {
-            self.lastUpdateDuration = timer.read();
-        }
-
-        try self.statistics.update(ticks, frameAllocator, self.monsters.size(), self.lastUpdateDuration, self.lastRenderDuration);
-
-        if (self.lastTicks == 0) {
-            self.lastTicks = ticks;
-            return;
-        }
-
-        try self.updateMonsters(ticks);
-        try self.updateTowers(ticks);
-        try self.updateProjectiles(frameAllocator, ticks);
-        try self.updateAnimations(ticks);
-
-        self.lastTicks = ticks;
-    }
-
-    fn render(self: *Game) !void {
-        var timer = try std.time.Timer.start();
-        defer {
-            self.lastRenderDuration = timer.read();
-        }
- 
-        try self.engine.render();
     }
 };
 
@@ -468,12 +103,19 @@ pub fn main() !void {
     defer sdl.SDL_DestroyRenderer(renderer);
 
     var eng = try engine.Engine.init(allocator, renderer);
+    defer eng.deinit();
+
     var game: Game = .{ .engine = &eng };
     try game.init(allocator, renderer);
     defer game.deinit();
 
-    // main loop
+    var statistics = Statistics{.engine = &eng, .resources = &game.resources};
+    try statistics.init();
 
+    var lastUpdateDuration: u64 = 0;
+    var lastRenderDuration: u64 = 0;
+
+    // main loop
     while (true) {
         if (eng.nextEvent()) |event| {
             game.event(&event);
@@ -485,8 +127,27 @@ pub fn main() !void {
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const frameAllocator = arena.allocator();
-        try game.update(frameAllocator, sdl.SDL_GetTicks());
-        try game.render();
+        
+        const ticks = sdl.SDL_GetTicks();
+        {
+            var timer = try std.time.Timer.start();
+            defer {
+                lastUpdateDuration = timer.read();
+            }
+            try eng.update(frameAllocator, ticks);
+            try game.update(frameAllocator, ticks);
+        }
+        try statistics.update(ticks, frameAllocator, &game, lastUpdateDuration, lastRenderDuration);
+
+        {
+            var timer = try std.time.Timer.start();
+            defer {
+                lastRenderDuration = timer.read();
+            }
+    
+            try eng.render();
+            try game.render();
+        }        
         sdl.SDL_RenderPresent(renderer);
     }
 }

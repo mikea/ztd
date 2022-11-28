@@ -6,9 +6,12 @@ pub const sdl = @cImport({
     @cInclude("SDL2/SDL_ttf.h");
 });
 
-pub const cairo = @cImport({
+const cairo = @cImport({
     @cInclude("cairo/cairo.h");
 });
+
+pub const Renderer = sdl.SDL_Renderer;
+pub const Event = sdl.SDL_Event;
 
 const SdlError = error{
     SdlError,

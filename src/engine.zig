@@ -40,10 +40,19 @@ pub const Text = struct {
     }
 };
 
+const Animation = struct {
+    sheet: *sdlZig.SpriteSheet,
+    sprites: []const sdlZig.SpriteSheet.Coords,
+    animationDelay: u32,
+    i: usize = 0,
+    lastFrame: u64 = 0,
+};
+
 pub const Engine = struct {
     const BoundsTable = table.RTable(Id, maxId);
     const TextsTable = table.Table(Id, maxId, Text);
     const SpritesTable = table.Table(Id, maxId, Sprite);
+    const AnimationsTable = table.Table(Id, maxId, Animation);
 
     displaySize: Vec,
     view: Rect = undefined,
@@ -53,6 +62,7 @@ pub const Engine = struct {
     bounds: BoundsTable,
     texts: TextsTable,
     sprites: SpritesTable,
+    animations: AnimationsTable,
 
     ids: IdManager = .{},
     running: bool = true,
@@ -74,6 +84,7 @@ pub const Engine = struct {
             .bounds = try BoundsTable.init(allocator),
             .texts = try TextsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
+            .animations = try AnimationsTable.init(allocator),
             .displaySize = displaySize,
             .view = view,
         };
@@ -83,6 +94,7 @@ pub const Engine = struct {
         self.bounds.deinit();
         self.texts.deinit();
         self.sprites.deinit();
+        self.animations.deinit();
     }
 
     pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
@@ -126,6 +138,25 @@ pub const Engine = struct {
 
         return null;
     }
+    
+    pub fn update(self: *Engine, _: std.mem.Allocator, ticks: u32) !void {
+        try self.updateAnimations(ticks);
+    }
+
+    fn updateAnimations(self: *Engine, ticks: u32) !void {
+        // advance animation
+        var it = self.animations.iterator();
+        while (it.next()) |entry| {
+            const animation = &entry.value;
+            if (ticks - animation.lastFrame > animation.animationDelay) {
+                animation.i = (animation.i + 1) % animation.sprites.len;
+                animation.lastFrame = ticks;
+            }
+            const coords = animation.sprites[animation.i];
+            try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y, 0));
+        }
+    }
+
 
     pub fn render(self: *Engine) !void {
         try self.renderSprites();
