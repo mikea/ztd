@@ -2,17 +2,14 @@ const std = @import("std");
 const table = @import("table.zig");
 const geom = @import("geom.zig");
 
-
 const sdlZig = @import("sdl.zig");
 const sdl = sdlZig.sdl;
 const checkNotNull = sdlZig.checkNotNull;
 const checkInt = sdlZig.checkInt;
 const Sprite = sdlZig.Sprite;
 
-
 const Vec = geom.Vec2;
 const Rect = geom.Rect;
-
 
 pub const Id = u32;
 pub const maxId: usize = 1 << 18;
@@ -48,7 +45,11 @@ pub const Engine = struct {
     const TextsTable = table.Table(Id, maxId, Text);
     const SpritesTable = table.Table(Id, maxId, Sprite);
 
+    displaySize: Vec,
+    view: Rect = undefined,
     renderer: *sdl.SDL_Renderer,
+
+    // tables
     bounds: BoundsTable,
     texts: TextsTable,
     sprites: SpritesTable,
@@ -57,13 +58,24 @@ pub const Engine = struct {
     running: bool = true,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !Engine {
+        var displayMode: sdl.SDL_DisplayMode = undefined;
+        try checkInt(sdl.SDL_GetCurrentDisplayMode(0, &displayMode));
+
         try checkInt(sdl.SDL_SetRenderDrawBlendMode(renderer, sdl.SDL_BLENDMODE_BLEND));
+
+        const displaySize = Vec{ .x = @intToFloat(f32, displayMode.w), .y = @intToFloat(f32, displayMode.h) };
+        // initially 1000 wide, centered on origin
+        const w = 1000;
+        const h = w * displaySize.y / displaySize.x;
+        const view = Rect{ .a = .{ .x = -w / 2, .y = -h / 2 }, .b = .{ .x = w / 2, .y = h / 2 } };
 
         return .{
             .renderer = renderer,
             .bounds = try BoundsTable.init(allocator),
             .texts = try TextsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
+            .displaySize = displaySize,
+            .view = view,
         };
     }
 
@@ -74,13 +86,37 @@ pub const Engine = struct {
     }
 
     pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
+        const delta = self.view.height() / 10.0;
+        const zoom = 1.1;
+
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
                 sdl.SDL_QUIT => self.running = false,
                 sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
                     sdl.SDLK_ESCAPE => self.running = false,
+                    sdl.SDLK_UP => {
+                        self.view = self.view.translate(.{ .x = 0, .y = -delta });
+                        return null;
+                    },
+                    sdl.SDLK_DOWN => {
+                        self.view = self.view.translate(.{ .x = 0, .y = delta });
+                        return null;
+                    },
+                    sdl.SDLK_LEFT => {
+                        self.view = self.view.translate(.{ .x = -delta, .y = 0 });
+                        return null;
+                    },
+                    sdl.SDLK_RIGHT => {
+                        self.view = self.view.translate(.{ .x = delta, .y = 0 });
+                        return null;
+                    },
                     else => {},
+                },
+                sdl.SDL_MOUSEWHEEL => {
+                    const z: f32 = if (event.wheel.y > 0) zoom else 1.0 / zoom;
+                    self.view = Rect.centered(self.view.center(), self.view.size().mul(z));
+                    return null;
                 },
                 else => {},
             }
@@ -92,7 +128,42 @@ pub const Engine = struct {
     }
 
     pub fn render(self: *Engine) !void {
+        try self.renderSprites();
         try self.renderText();
+    }
+
+    fn renderSprites(self: *Engine) !void {
+        try checkInt(sdl.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
+        try checkInt(sdl.SDL_RenderClear(self.renderer));
+
+        var sdlViewport: sdl.SDL_Rect = undefined;
+        sdl.SDL_RenderGetViewport(self.renderer, &sdlViewport);
+
+        const viewport = Rect.sized(.{ .x = @intToFloat(f32, sdlViewport.x), .y = @intToFloat(f32, sdlViewport.y) }, .{ .x = @intToFloat(f32, sdlViewport.w), .y = @intToFloat(f32, sdlViewport.h) });
+        const view = self.view;
+
+        const translation = viewport.a.minus(view.a);
+        const scale = viewport.size().x / view.size().x;
+
+        // draw sprites
+        var it = self.sprites.iterator();
+        while (it.next()) |entry| {
+            const sprite = entry.value;
+            const o = try self.bounds.get(entry.id);
+            if (self.view.intersects(o)) {
+                const a = o.a.add(translation).mul(scale);
+                const size = o.size().mul(scale);
+
+                const destRect = sdl.SDL_Rect{
+                    .x = @floatToInt(i32, a.x),
+                    .y = @floatToInt(i32, a.y),
+                    .w = @floatToInt(i32, size.x),
+                    .h = @floatToInt(i32, size.y),
+                };
+
+                try checkInt(sdl.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.SDL_FLIP_NONE));
+            }
+        }
     }
 
     fn renderText(self: *Engine) !void {
@@ -104,8 +175,18 @@ pub const Engine = struct {
                 text.texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(self.renderer, text.surface));
             }
 
-            const srcRect: sdl.SDL_Rect = .{ .x = 0, .y = 0, .w = text.surface.*.w, .h = text.surface.*.h, };
-            const dstRect: sdl.SDL_Rect = .{ .x = @floatToInt(i32, text.pos.x), .y = @floatToInt(i32, text.pos.y), .w = text.surface.*.w, .h = text.surface.*.h, };
+            const srcRect: sdl.SDL_Rect = .{
+                .x = 0,
+                .y = 0,
+                .w = text.surface.*.w,
+                .h = text.surface.*.h,
+            };
+            const dstRect: sdl.SDL_Rect = .{
+                .x = @floatToInt(i32, text.pos.x),
+                .y = @floatToInt(i32, text.pos.y),
+                .w = text.surface.*.w,
+                .h = text.surface.*.h,
+            };
 
             try checkInt(sdl.SDL_RenderCopy(self.renderer, text.texture, &srcRect, &dstRect));
         }
@@ -117,6 +198,6 @@ pub const Engine = struct {
         }
 
         const surface = sdl.TTF_RenderText_Solid(font, @as([*:0]const u8, text), color);
-        try self.texts.add(id, .{.surface = surface, .pos = pos, .texture = null});
+        try self.texts.add(id, .{ .surface = surface, .pos = pos, .texture = null });
     }
 };

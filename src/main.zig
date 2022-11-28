@@ -131,7 +131,6 @@ const Animation = struct {
 const Game = struct {
     const MonstersTable = Table(Id, maxId, Monster);
 
-    displaySize: Vec2,
     engine: *engine.Engine,
 
     lastTicks: u32 = 0,
@@ -139,7 +138,6 @@ const Game = struct {
     lastRenderDuration: u64 = 0,
     statistics: Statistics = undefined,
 
-    view: Rect = undefined,
     resources: Resources = undefined,
     healths: Table(Id, maxId, Health) = undefined,
     towers: Table(Id, maxId, Tower) = undefined,
@@ -157,11 +155,6 @@ const Game = struct {
         self.monsters = try @TypeOf(self.monsters).init(allocator);
         self.projectiles = try @TypeOf(self.projectiles).init(allocator);
         self.animations = try @TypeOf(self.animations).init(allocator);
-
-        // initially 1000 wide, centered on origin
-        const w = 1000;
-        const h = w * self.displaySize.y / self.displaySize.x;
-        self.view = .{ .a = .{ .x = -w / 2, .y = -h / 2 }, .b = .{ .x = w / 2, .y = h / 2 } };
 
         {
             // init monsters
@@ -248,24 +241,7 @@ const Game = struct {
         try self.engine.sprites.add(rangeId, try sdlZig.drawCircle(self.engine.renderer, tower.range));
     }
 
-    fn event(self: *Game, evt: *const sdl.SDL_Event) void {
-        const delta = self.view.height() / 10.0;
-        const zoom = 1.1;
-
-        switch (evt.type) {
-            sdl.SDL_KEYDOWN => switch (evt.key.keysym.sym) {
-                sdl.SDLK_UP => self.view = self.view.translate(.{ .x = 0, .y = -delta }),
-                sdl.SDLK_DOWN => self.view = self.view.translate(.{ .x = 0, .y = delta }),
-                sdl.SDLK_LEFT => self.view = self.view.translate(.{ .x = -delta, .y = 0 }),
-                sdl.SDLK_RIGHT => self.view = self.view.translate(.{ .x = delta, .y = 0 }),
-                else => {},
-            },
-            sdl.SDL_MOUSEWHEEL => {
-                const z: f32 = if (evt.wheel.y > 0) zoom else 1.0 / zoom;
-                self.view = Rect.centered(self.view.center(), self.view.size().mul(z));
-            },
-            else => {},
-        }
+    fn event(_: *Game, _: *const sdl.SDL_Event) void {
     }
 
     fn updateTowerTargets(self: *Game) !void {
@@ -451,42 +427,10 @@ const Game = struct {
         self.lastTicks = ticks;
     }
 
-    fn render(self: *Game, renderer: *sdl.SDL_Renderer) !void {
+    fn render(self: *Game) !void {
         var timer = try std.time.Timer.start();
         defer {
             self.lastRenderDuration = timer.read();
-        }
-
-        try checkInt(sdl.SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff));
-        try checkInt(sdl.SDL_RenderClear(renderer));
-
-        var sdlViewport: sdl.SDL_Rect = undefined;
-        sdl.SDL_RenderGetViewport(renderer, &sdlViewport);
-
-        const viewport = Rect.sized(.{ .x = @intToFloat(f32, sdlViewport.x), .y = @intToFloat(f32, sdlViewport.y) }, .{ .x = @intToFloat(f32, sdlViewport.w), .y = @intToFloat(f32, sdlViewport.h) });
-        const view = self.view;
-
-        const translation = viewport.a.minus(view.a);
-        const scale = viewport.size().x / view.size().x;
-
-        // draw sprites
-        var it = self.engine.sprites.iterator();
-        while (it.next()) |entry| {
-            const sprite = entry.value;
-            const o = try self.engine.bounds.get(entry.id);
-            if (self.view.intersects(o)) {
-                const a = o.a.add(translation).mul(scale);
-                const size = o.size().mul(scale);
-
-                const destRect = sdl.SDL_Rect{
-                    .x = @floatToInt(i32, a.x),
-                    .y = @floatToInt(i32, a.y),
-                    .w = @floatToInt(i32, size.x),
-                    .h = @floatToInt(i32, size.y),
-                };
-
-                try checkInt(sdl.SDL_RenderCopyEx(renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.SDL_FLIP_NONE));
-            }
         }
  
         try self.engine.render();
@@ -524,10 +468,7 @@ pub fn main() !void {
     defer sdl.SDL_DestroyRenderer(renderer);
 
     var eng = try engine.Engine.init(allocator, renderer);
-    var game: Game = .{
-        .displaySize = .{ .x = @intToFloat(f32, displayMode.w), .y = @intToFloat(f32, displayMode.h) },
-        .engine = &eng,
-    };
+    var game: Game = .{ .engine = &eng };
     try game.init(allocator, renderer);
     defer game.deinit();
 
@@ -545,7 +486,7 @@ pub fn main() !void {
         defer arena.deinit();
         const frameAllocator = arena.allocator();
         try game.update(frameAllocator, sdl.SDL_GetTicks());
-        try game.render(renderer);
+        try game.render();
         sdl.SDL_RenderPresent(renderer);
     }
 }
