@@ -40,79 +40,59 @@ const Projectile = struct {
     target: Id,
 };
 
+const UI = struct {
+    engine: *engine.Engine,
+    resources: *Resources,
+
+    modeId: Id = 0,
+
+    pub fn init(eng: *engine.Engine, resources: *Resources) !@This() {
+        return .{
+            .engine = eng,
+            .resources = resources,
+            .modeId = eng.ids.nextId(),
+        };
+    }
+
+    fn update(self: *@This(), _: std.mem.Allocator) !void {
+        try self.engine.setText(self.modeId, "mode: select", .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+    }
+};
+
 pub const Game = struct {
     const MonstersTable = Table(Id, maxId, Monster);
+    const HealthsTable = Table(Id, maxId, Health);
+    const TowersTable = Table(Id, maxId, Tower);
+    const ProjectilesTable = Table(Id, maxId, Projectile);
 
     engine: *engine.Engine,
+    resources: *Resources,
 
     lastTicks: u32 = 0,
 
-    resources: Resources = undefined,
-    healths: Table(Id, maxId, Health) = undefined,
-    towers: Table(Id, maxId, Tower) = undefined,
-    monsters: MonstersTable = undefined,
-    projectiles: Table(Id, maxId, Projectile) = undefined,
+    healths: HealthsTable,
+    towers: TowersTable,
+    monsters: MonstersTable,
+    projectiles: ProjectilesTable,
+    ui: UI,
 
-    pub fn init(self: *Game, allocator: std.mem.Allocator, renderer: *sdl.Renderer) !void {
-        self.resources = try Resources.init(renderer);
-
-        self.healths = try @TypeOf(self.healths).init(allocator);
-        self.towers = try @TypeOf(self.towers).init(allocator);
-        self.monsters = try @TypeOf(self.monsters).init(allocator);
-        self.projectiles = try @TypeOf(self.projectiles).init(allocator);
-
-        {
-            // init monsters
-            const grid = 200;
-            const step = 20;
-
-            var i: i32 = -grid + 1;
-            while (i < grid) : (i += 1) {
-                var j: i32 = -grid + 1;
-                while (j < grid) : (j += 1) {
-                    if (j < 5 and j > -5) {
-                        continue;
-                    }
-                    const id = self.engine.ids.nextId();
-                    try self.monsters.add(id, .{ .speed = 5, .targetTower = id });
-                    try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-                    try self.engine.bounds.add(id, Rect.initCentered(@intToFloat(f32, i) * step, @intToFloat(f32, j) * step, 8, 8));
-                    try self.engine.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]sdl.SpriteSheet.Coords{
-                        .{ .x = 2, .y = 0 },
-                        .{ .x = 3, .y = 0 },
-                        .{ .x = 4, .y = 0 },
-                        .{ .x = 3, .y = 0 },
-                    } });
-                }
-            }
-        }
-
-        {
-            // init towers
-            var i: i32 = -5000;
-            while (i <= 5000) {
-                try self.addTower(.{ .x = @intToFloat(f32, i), .y = 0 });
-                i += 200;
-            }
-        }
-
-        {
-            const id = self.engine.ids.nextId();
-
-            // add keep
-            try self.engine.bounds.add(id, Rect.initCentered(0, 0, 16, 16));
-            try self.engine.sprites.add(id, self.resources.woodKeep.sprite(0, 0, 0));
-        }
+    pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, resources: *Resources) !Game {
+        return .{
+            .engine = eng,
+            .resources = resources,
+            .healths = try HealthsTable.init(allocator),
+            .towers = try TowersTable.init(allocator),
+            .monsters = try MonstersTable.init(allocator),
+            .projectiles = try ProjectilesTable.init(allocator),
+            .ui = try UI.init(eng, resources),
+        };
     }
 
     pub fn deinit(self: *Game) void {
-        self.resources.deinit();
-
         self.healths.deinit();
         self.monsters.deinit();
         self.towers.deinit();
         self.projectiles.deinit();
-        self.engine.sprites.deinit();
     }
 
     fn delete(self: *Game, id: Id) !void {
@@ -126,7 +106,7 @@ pub const Game = struct {
         try self.projectiles.delete(id);
     }
 
-    fn addTower(self: *Game, pos: Vec) !void {
+    pub fn addTower(self: *Game, pos: Vec) !void {
         const id = self.engine.ids.nextId();
         const tower = Tower{ .range = 100, .fireDelay = 500, .missileSpeed = 500, .targetMonster = id };
         try self.towers.add(id, tower);
@@ -140,8 +120,7 @@ pub const Game = struct {
         try self.engine.sprites.add(rangeId, try sdl.drawCircle(self.engine.renderer, tower.range));
     }
 
-    pub fn event(_: *Game, _: *const sdl.Event) void {
-    }
+    pub fn event(_: *Game, _: *const sdl.Event) void {}
 
     fn updateTowerTargets(self: *Game) !void {
         {
@@ -170,14 +149,13 @@ pub const Game = struct {
                             s.closestId = id;
                         }
                     }
-                } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.*.id, .closestDistance = std.math.f32_max};
+                } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.*.id, .closestDistance = std.math.f32_max };
 
-                try self.engine.bounds.findIntersect(Rect.centered(pos, .{.x = tower.range * 2, .y = tower.range * 2}), @TypeOf(collector), &collector, @TypeOf(collector).callback);
+                try self.engine.bounds.findIntersect(Rect.centered(pos, .{ .x = tower.range * 2, .y = tower.range * 2 }), @TypeOf(collector), &collector, @TypeOf(collector).callback);
                 entry.*.value.targetMonster = collector.closestId;
             }
         }
     }
-
 
     fn updateMonsters(self: *Game, ticks: u32) !void {
         const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
@@ -226,7 +204,7 @@ pub const Game = struct {
                 const pos = (try self.engine.bounds.get(entry.id)).center();
 
                 if (tower.targetMonster == entry.id or
-                    ticks - tower.lastFire < tower.fireDelay )
+                    ticks - tower.lastFire < tower.fireDelay)
                 {
                     continue;
                 }
@@ -301,9 +279,10 @@ pub const Game = struct {
         try self.updateTowers(ticks);
         try self.updateProjectiles(frameAllocator, ticks);
 
+        try self.ui.update(frameAllocator);
+
         self.lastTicks = ticks;
     }
 
-    pub fn render(_: *Game) !void {
-    }
+    pub fn render(_: *Game) !void {}
 };

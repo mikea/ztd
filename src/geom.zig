@@ -20,7 +20,7 @@ pub const Vec2 = struct {
         return minus(to, from).norm2();
     }
 
-    fn dir(from: Vec2, to: Vec2) Vec2 {
+    pub fn dir(from: Vec2, to: Vec2) Vec2 {
         return minus(to, from).normalized();
     }
 
@@ -114,7 +114,7 @@ pub const Rect = struct {
     }
 
     pub fn center(self: *const Rect) Vec2 {
-        return self.a.add(self.size().mul(1.0 / 2.0));
+        return .{ .x = (self.a.x + self.b.x) / 2, .y = (self.a.y + self.b.y) / 2 };
     }
 
     pub fn translate(self: *const Rect, v: Vec2) Rect {
@@ -131,7 +131,7 @@ pub const Rect = struct {
 
     // union is taken
     pub fn add(self: *const Rect, r: Rect) Rect {
-        return .{ .a = .{.x =  std.math.min(self.a.x, r.a.x), .y =  std.math.min(self.a.y, r.a.y)}, .b = .{.x =  std.math.max(self.b.x, r.b.x), .y =  std.math.max(self.b.y, r.b.y)} };
+        return .{ .a = .{ .x = std.math.min(self.a.x, r.a.x), .y = std.math.min(self.a.y, r.a.y) }, .b = .{ .x = std.math.max(self.b.x, r.b.x), .y = std.math.max(self.b.y, r.b.y) } };
     }
 
     pub fn area(self: *const Rect) f32 {

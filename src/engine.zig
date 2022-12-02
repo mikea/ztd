@@ -28,8 +28,15 @@ pub const IdManager = struct {
     }
 };
 
+pub const Alignment = enum {
+    LEFT,
+    CENTER,
+    RIGHT,
+};
+
 pub const Text = struct {
     pos: Vec,
+    alignment: Alignment,
     surface: *sdl.SDL_Surface,
     texture: ?*sdl.SDL_Texture,
 
@@ -99,7 +106,8 @@ pub const Engine = struct {
 
     pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
         const delta = self.view.height() / 10.0;
-        const zoom = 1.1;
+        const mouseZoom = 1.1;
+        const kbdZoom = 1.7;
 
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
@@ -123,10 +131,18 @@ pub const Engine = struct {
                         self.view = self.view.translate(.{ .x = delta, .y = 0 });
                         return null;
                     },
+                    sdl.SDLK_PAGEUP => {
+                        self.view = Rect.centered(self.view.center(), self.view.size().mul(kbdZoom));
+                        return null;
+                    },
+                    sdl.SDLK_PAGEDOWN => {
+                        self.view = Rect.centered(self.view.center(), self.view.size().mul(1.0 / kbdZoom));
+                        return null;
+                    },
                     else => {},
                 },
                 sdl.SDL_MOUSEWHEEL => {
-                    const z: f32 = if (event.wheel.y > 0) zoom else 1.0 / zoom;
+                    const z: f32 = if (event.wheel.y > 0) mouseZoom else 1.0 / mouseZoom;
                     self.view = Rect.centered(self.view.center(), self.view.size().mul(z));
                     return null;
                 },
@@ -138,7 +154,7 @@ pub const Engine = struct {
 
         return null;
     }
-    
+
     pub fn update(self: *Engine, _: std.mem.Allocator, ticks: u32) !void {
         try self.updateAnimations(ticks);
     }
@@ -156,7 +172,6 @@ pub const Engine = struct {
             try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y, 0));
         }
     }
-
 
     pub fn render(self: *Engine) !void {
         try self.renderSprites();
@@ -223,12 +238,18 @@ pub const Engine = struct {
         }
     }
 
-    pub fn setText(self: *Engine, id: Id, text: [:0]const u8, pos: Vec, color: sdl.SDL_Color, font: *sdl.TTF_Font) !void {
+    pub fn setText(self: *Engine, id: Id, text: [:0]const u8, pos: Vec, alignment: Alignment, color: sdl.SDL_Color, font: *sdl.TTF_Font) !void {
         if (self.texts.find(id)) |entry| {
             entry.value.destroy();
         }
 
         const surface = sdl.TTF_RenderText_Solid(font, @as([*:0]const u8, text), color);
-        try self.texts.add(id, .{ .surface = surface, .pos = pos, .texture = null });
+        const w = @intToFloat(f32, surface.*.w);
+        const alignedPos = switch (alignment) {
+            Alignment.LEFT => pos,
+            Alignment.CENTER => pos.minus(.{ .x =  w / 2, .y = 0 }),
+            Alignment.RIGHT => pos.minus(.{ .x = w, .y = 0 }),
+        };
+        try self.texts.add(id, .{ .surface = surface, .pos = alignedPos, .alignment = alignment, .texture = null });
     }
 };
