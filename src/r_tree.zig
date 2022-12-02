@@ -102,7 +102,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             }
 
             self.items.leaf[idx] = self.items.leaf[self.len - 1];
-            try locs.add(self.items.leaf[idx].id, .{.node = self, .i = @intCast(u16, idx)});
+            try locs.set(self.items.leaf[idx].id, .{.node = self, .i = @intCast(u16, idx)});
             self.len -= 1;
         }
 
@@ -206,7 +206,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             std.debug.assert(leafNode.len <= leafSize);
 
             leafNode.add(Entry, .{ .id = id, .rect = rect });
-            try self.locs.add(id, .{ .node = leafNode, .i = @intCast(u16, leafNode.len - 1) });
+            try self.locs.set(id, .{ .node = leafNode, .i = @intCast(u16, leafNode.len - 1) });
             Node.adjustTree(leafNode.parent, rect);
 
             if (leafNode.len == leafNode.items.leaf.len) {
@@ -250,7 +250,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             if (T == Entry) {
                 for (result) |n| {
                     for (n.items.leaf[0..n.len]) |*entry, i| {
-                        try self.locs.add(entry.id, .{ .node = n, .i = @intCast(u16, i)});
+                        try self.locs.set(entry.id, .{ .node = n, .i = @intCast(u16, i)});
                     }
                 }
             }

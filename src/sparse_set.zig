@@ -49,15 +49,21 @@ pub fn SparseSet(
             return self.find(i) != null;
         }
 
-        pub fn add(self: *@This(), i: I, t: T) !void {
+        pub fn set(self: *@This(), i: I, t: T) !void {
+            _ = try self.insertOrUpdate(i, t);
+        }
+
+        // returns true if insert happens, false otherwise
+        pub fn insertOrUpdate(self: *@This(), i: I, t: T) !bool {
             if (self.find(i)) |entry| {
                 entry.value = t;
-                return;
+                return false;
             }
 
             const denseIdx = @intCast(I, self.dense.items.len);
             try self.dense.append(.{ .id = i, .value = t });
             self.sparse[i] = denseIdx;
+            return true;
         }
 
         pub const Iterator = struct {

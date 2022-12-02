@@ -55,14 +55,23 @@ const Animation = struct {
     lastFrame: u64 = 0,
 };
 
+const Viewport = struct {
+    displaySize: Vec,
+    view: Rect = undefined,
+
+    pub fn screenToGame(self: *const Viewport, screenPos: Vec) Vec {
+        const norm = screenPos.ratio(self.displaySize);
+        return self.view.a.add(self.view.size().mul(norm));
+    }
+};
+
 pub const Engine = struct {
     const BoundsTable = table.RTable(Id, maxId);
     const TextsTable = table.Table(Id, maxId, Text);
     const SpritesTable = table.Table(Id, maxId, Sprite);
     const AnimationsTable = table.Table(Id, maxId, Animation);
 
-    displaySize: Vec,
-    view: Rect = undefined,
+    viewport: Viewport,
     renderer: *sdl.SDL_Renderer,
 
     // tables
@@ -73,6 +82,7 @@ pub const Engine = struct {
 
     ids: IdManager = .{},
     running: bool = true,
+    mousePos: Vec = .{ .x = 0, .y = 0 },
 
     pub fn init(allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !Engine {
         var displayMode: sdl.SDL_DisplayMode = undefined;
@@ -92,8 +102,10 @@ pub const Engine = struct {
             .texts = try TextsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
             .animations = try AnimationsTable.init(allocator),
-            .displaySize = displaySize,
-            .view = view,
+            .viewport = .{
+                .displaySize = displaySize,
+                .view = view,
+            },
         };
     }
 
@@ -105,7 +117,7 @@ pub const Engine = struct {
     }
 
     pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
-        const delta = self.view.height() / 10.0;
+        const delta = self.viewport.view.height() / 10.0;
         const mouseZoom = 1.1;
         const kbdZoom = 1.7;
 
@@ -114,37 +126,41 @@ pub const Engine = struct {
             switch (event.type) {
                 sdl.SDL_QUIT => self.running = false,
                 sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
-                    sdl.SDLK_ESCAPE => self.running = false,
+                    sdl.SDLK_q => self.running = false,
                     sdl.SDLK_UP => {
-                        self.view = self.view.translate(.{ .x = 0, .y = -delta });
+                        self.viewport.view = self.viewport.view.translate(.{ .x = 0, .y = -delta });
                         return null;
                     },
                     sdl.SDLK_DOWN => {
-                        self.view = self.view.translate(.{ .x = 0, .y = delta });
+                        self.viewport.view = self.viewport.view.translate(.{ .x = 0, .y = delta });
                         return null;
                     },
                     sdl.SDLK_LEFT => {
-                        self.view = self.view.translate(.{ .x = -delta, .y = 0 });
+                        self.viewport.view = self.viewport.view.translate(.{ .x = -delta, .y = 0 });
                         return null;
                     },
                     sdl.SDLK_RIGHT => {
-                        self.view = self.view.translate(.{ .x = delta, .y = 0 });
+                        self.viewport.view = self.viewport.view.translate(.{ .x = delta, .y = 0 });
                         return null;
                     },
                     sdl.SDLK_PAGEUP => {
-                        self.view = Rect.centered(self.view.center(), self.view.size().mul(kbdZoom));
+                        self.viewport.view = Rect.centered(self.viewport.view.center(), self.viewport.view.size().scale(kbdZoom));
                         return null;
                     },
                     sdl.SDLK_PAGEDOWN => {
-                        self.view = Rect.centered(self.view.center(), self.view.size().mul(1.0 / kbdZoom));
+                        self.viewport.view = Rect.centered(self.viewport.view.center(), self.viewport.view.size().scale(1.0 / kbdZoom));
                         return null;
                     },
                     else => {},
                 },
                 sdl.SDL_MOUSEWHEEL => {
                     const z: f32 = if (event.wheel.y > 0) mouseZoom else 1.0 / mouseZoom;
-                    self.view = Rect.centered(self.view.center(), self.view.size().mul(z));
+                    self.viewport.view = Rect.centered(self.viewport.view.center(), self.viewport.view.size().scale(z));
                     return null;
+                },
+                sdl.SDL_MOUSEMOTION => {
+                    const screenPos = Vec{ .x = @intToFloat(f32, event.motion.x), .y = @intToFloat(f32, event.motion.y) };
+                    self.mousePos = self.viewport.screenToGame(screenPos);
                 },
                 else => {},
             }
@@ -185,8 +201,8 @@ pub const Engine = struct {
         var sdlViewport: sdl.SDL_Rect = undefined;
         sdl.SDL_RenderGetViewport(self.renderer, &sdlViewport);
 
-        const viewport = Rect.sized(.{ .x = @intToFloat(f32, sdlViewport.x), .y = @intToFloat(f32, sdlViewport.y) }, .{ .x = @intToFloat(f32, sdlViewport.w), .y = @intToFloat(f32, sdlViewport.h) });
-        const view = self.view;
+        const viewport = Rect.initSized(.{ .x = @intToFloat(f32, sdlViewport.x), .y = @intToFloat(f32, sdlViewport.y) }, .{ .x = @intToFloat(f32, sdlViewport.w), .y = @intToFloat(f32, sdlViewport.h) });
+        const view = self.viewport.view;
 
         const translation = viewport.a.minus(view.a);
         const scale = viewport.size().x / view.size().x;
@@ -196,9 +212,9 @@ pub const Engine = struct {
         while (it.next()) |entry| {
             const sprite = entry.value;
             const o = try self.bounds.get(entry.id);
-            if (self.view.intersects(o)) {
-                const a = o.a.add(translation).mul(scale);
-                const size = o.size().mul(scale);
+            if (view.intersects(o)) {
+                const a = o.a.add(translation).scale(scale);
+                const size = o.size().scale(scale);
 
                 const destRect = sdl.SDL_Rect{
                     .x = @floatToInt(i32, a.x),
@@ -247,7 +263,7 @@ pub const Engine = struct {
         const w = @intToFloat(f32, surface.*.w);
         const alignedPos = switch (alignment) {
             Alignment.LEFT => pos,
-            Alignment.CENTER => pos.minus(.{ .x =  w / 2, .y = 0 }),
+            Alignment.CENTER => pos.minus(.{ .x = w / 2, .y = 0 }),
             Alignment.RIGHT => pos.minus(.{ .x = w, .y = 0 }),
         };
         try self.texts.add(id, .{ .surface = surface, .pos = alignedPos, .alignment = alignment, .texture = null });

@@ -10,42 +10,42 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
         pub const Entry = Set.Entry;
         pub const Iterator = Set.Iterator;
 
-        set: Set,
+        sparse: Set,
 
         pub fn init(allocator: std.mem.Allocator) !@This() {
-            return .{ .set = try Set.init(allocator) };
+            return .{ .sparse = try Set.init(allocator) };
         }
 
         pub fn deinit(self: *@This()) void {
-            self.set.deinit();
+            self.sparse.deinit();
         }
 
         pub fn add(self: *@This(), id: Id, t: T) !void {
-            return self.set.add(id, t);
+            return self.sparse.set(id, t);
         }
 
         pub fn iterator(self: *@This()) Iterator {
-            return self.set.iterator();
+            return self.sparse.iterator();
         }
 
         pub fn find(self: *@This(), id: Id) ?*Entry {
-            return self.set.find(id);
+            return self.sparse.find(id);
         }
 
         pub fn get(self: *@This(), id: Id) !*T {
-            return self.set.get(id);
+            return self.sparse.get(id);
         }
 
         pub fn delete(self: *@This(), id: Id) !void {
-            return self.set.delete(id);
+            return self.sparse.delete(id);
         }
 
         pub fn size(self: *const @This()) usize {
-            return self.set.size();
+            return self.sparse.size();
         }
 
         pub fn update(self: *@This(), id: Id, t: Rect) !void {
-            return self.set.add(id, t);
+            return self.sparse.add(id, t);
         }
     };
 }
@@ -59,43 +59,51 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
         pub const Entry = Set.Entry;
         // pub const Iterator = Set.Iterator;
 
-        set: Set,
+        sparse: Set,
         tree: Tree,
 
         pub fn init(allocator: std.mem.Allocator) !@This() {
-            return .{ .set = try Set.init(allocator), .tree = try Tree.init(allocator) };
+            return .{ .sparse = try Set.init(allocator), .tree = try Tree.init(allocator) };
         }
 
         pub fn deinit(self: *@This()) void {
-            self.set.deinit();
+            self.sparse.deinit();
             self.tree.deinit();
         }
 
         pub fn add(self: *@This(), id: Id, t: Rect) !void {
-            std.debug.assert(self.set.find(id) == null);
-            try self.set.add(id, t);
+            std.debug.assert(self.sparse.find(id) == null);
+            try self.sparse.set(id, t);
             try self.tree.insert(id, t);
         }
 
+        pub fn set(self: *@This(), id: Id, t: Rect) !void {
+            if (try self.sparse.insertOrUpdate(id, t)) {
+                try self.tree.insert(id, t);
+            } else {
+                try self.tree.update(id, t);
+            }
+        }
+
         pub fn get(self: *@This(), id: Id) !Rect {
-            return (try self.set.get(id)).*;
+            return (try self.sparse.get(id)).*;
         }
- 
-         pub fn find(self: *@This(), id: Id) ?Entry {
-            return (self.set.find(id) orelse return null).*;
+
+        pub fn find(self: *@This(), id: Id) ?Entry {
+            return (self.sparse.find(id) orelse return null).*;
         }
- 
+
         pub fn delete(self: *@This(), id: Id) !void {
-            return self.set.delete(id);
+            return self.sparse.delete(id);
         }
 
         pub fn update(self: *@This(), id: Id, t: Rect) !void {
-            try self.set.add(id, t);
+            try self.sparse.set(id, t);
             try self.tree.update(id, t);
         }
 
         pub fn findIntersect(self: *const @This(), rect: Rect, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
             try self.tree.findIntersect(rect, CallbackThis, callbackThis, callback);
         }
-  };
+    };
 }

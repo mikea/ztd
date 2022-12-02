@@ -47,7 +47,7 @@ pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
             const p = points[i];
 
             while (curDist < p.dist(last)) {
-                const delta = last.dir(p).mul(curDist);
+                const delta = last.dir(p).scale(curDist);
                 const next = last.add(delta);
                 try addMonster(self, next);
 
@@ -64,7 +64,7 @@ pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
 
 fn addMonster(self: *Game, pos: Vec) !void {
     const id = self.engine.ids.nextId();
-    try self.monsters.add(id, .{ .speed = 10, .targetTower = id });
+    try self.monsters.add(id, .{ .speed = 10, .targetTower = id, .price = 1 });
     try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
     try self.engine.bounds.add(id, Rect.initCentered(pos.x, pos.y, 8, 8));
     try self.engine.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]sdl.SpriteSheet.Coords{
@@ -88,16 +88,7 @@ pub fn initStress1(self: *Game) !void {
                 if (j < 5 and j > -5) {
                     continue;
                 }
-                const id = self.engine.ids.nextId();
-                try self.monsters.add(id, .{ .speed = 5, .targetTower = id });
-                try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-                try self.engine.bounds.add(id, Rect.initCentered(@intToFloat(f32, i) * step, @intToFloat(f32, j) * step, 8, 8));
-                try self.engine.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]sdl.SpriteSheet.Coords{
-                    .{ .x = 2, .y = 0 },
-                    .{ .x = 3, .y = 0 },
-                    .{ .x = 4, .y = 0 },
-                    .{ .x = 3, .y = 0 },
-                } });
+                try addMonster(self, .{.x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step});
             }
         }
     }

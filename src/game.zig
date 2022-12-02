@@ -33,6 +33,7 @@ const Tower = struct {
 const Monster = struct {
     speed: f32,
     targetTower: Id,
+    price: usize,
 };
 
 const Projectile = struct {
@@ -40,22 +41,64 @@ const Projectile = struct {
     target: Id,
 };
 
+const Mode = enum {
+    SELECT,
+    BUILD,
+};
+
 const UI = struct {
     engine: *engine.Engine,
     resources: *Resources,
+    game: *Game,
 
-    modeId: Id = 0,
+    mode: Mode = Mode.SELECT,
+    modeId: Id,
+    shadowId: Id,
+    moneyId: Id,
 
-    pub fn init(eng: *engine.Engine, resources: *Resources) !@This() {
+    pub fn init(game: *Game) !@This() {
         return .{
-            .engine = eng,
-            .resources = resources,
-            .modeId = eng.ids.nextId(),
+            .game = game,
+            .engine = game.engine,
+            .resources = game.resources,
+            .modeId = game.engine.ids.nextId(),
+            .shadowId = game.engine.ids.nextId(),
+            .moneyId = game.engine.ids.nextId(),
         };
     }
 
-    fn update(self: *@This(), _: std.mem.Allocator) !void {
-        try self.engine.setText(self.modeId, "mode: select", .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+    pub fn event(self: *@This(), e: *const sdl.Event) !void {
+        switch (e.type) {
+            sdl.sdl.SDL_KEYDOWN => switch (e.key.keysym.sym) {
+                sdl.sdl.SDLK_b => self.mode = Mode.BUILD,
+                sdl.sdl.SDLK_ESCAPE => self.mode = Mode.SELECT,
+                else => {},
+            },
+            sdl.sdl.SDL_MOUSEBUTTONDOWN => {
+                if (self.mode == Mode.BUILD and self.game.money >= 10) {
+                    // self.mode = Mode.SELECT;
+                    try self.game.addTower(self.engine.mousePos.grid(8, 8));
+                    self.game.money -= 10;
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn update(self: *@This(), frameAllocator: std.mem.Allocator) !void {
+        const mode = try std.fmt.allocPrintZ(frameAllocator, "mode: {}", .{self.mode});
+        try self.engine.setText(self.modeId, mode, .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+
+        const money = try std.fmt.allocPrintZ(frameAllocator, "$ {}", .{self.game.money});
+        try self.engine.setText(self.moneyId, money, .{ .x = 0, .y = 20 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+
+        if (self.mode == Mode.BUILD) {
+            try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
+            try self.engine.sprites.add(self.shadowId, self.resources.tower.sprite(0, 0, 0));
+        } else {
+            try self.engine.bounds.delete(self.shadowId);
+            try self.engine.sprites.delete(self.shadowId);
+        }
     }
 };
 
@@ -75,17 +118,21 @@ pub const Game = struct {
     monsters: MonstersTable,
     projectiles: ProjectilesTable,
     ui: UI,
+    towersUpdated: bool = false,
+    money: usize = 0,
 
-    pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, resources: *Resources) !Game {
-        return .{
+    pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, resources: *Resources) !*Game {
+        var game = try allocator.create(Game);
+        game.* = .{
             .engine = eng,
             .resources = resources,
             .healths = try HealthsTable.init(allocator),
             .towers = try TowersTable.init(allocator),
             .monsters = try MonstersTable.init(allocator),
             .projectiles = try ProjectilesTable.init(allocator),
-            .ui = try UI.init(eng, resources),
+            .ui = try UI.init(game),
         };
+        return game;
     }
 
     pub fn deinit(self: *Game) void {
@@ -118,9 +165,13 @@ pub const Game = struct {
         const rangeId = self.engine.ids.nextId();
         try self.engine.bounds.add(rangeId, Rect.initCentered(pos.x, pos.y, tower.range * 2, tower.range * 2));
         try self.engine.sprites.add(rangeId, try sdl.drawCircle(self.engine.renderer, tower.range));
+
+        self.towersUpdated = true;
     }
 
-    pub fn event(_: *Game, _: *const sdl.Event) void {}
+    pub fn event(self: *Game, e: *const sdl.Event) !void {
+        try self.ui.event(e);
+    }
 
     fn updateTowerTargets(self: *Game) !void {
         {
@@ -167,7 +218,7 @@ pub const Game = struct {
             const bound = try self.engine.bounds.get(entry.*.id);
             const loc = bound.center();
 
-            if (self.towers.find(monster.targetTower) == null) {
+            if (self.towersUpdated or self.towers.find(monster.targetTower) == null) {
                 // find closest tower
                 // todo: make this faster
 
@@ -187,7 +238,7 @@ pub const Game = struct {
             const d = Vec.minus(targetLoc, loc);
             const n = d.norm();
             if (n > 1.0e-2) {
-                const dn = d.mul(entry.*.value.speed * dt / n);
+                const dn = d.scale(entry.*.value.speed * dt / n);
                 try self.engine.bounds.update(entry.*.id, bound.translate(dn));
             }
         }
@@ -242,7 +293,7 @@ pub const Game = struct {
                 const projectile = try self.engine.bounds.get(entry.id);
                 const target = self.engine.bounds.find(entry.value.target) orelse {
                     // this projectile's target doesn't exist anymore, delete it.
-                    try toDelete.add(entry.id, {});
+                    try toDelete.set(entry.id, {});
                     continue;
                 };
 
@@ -251,12 +302,15 @@ pub const Game = struct {
                 const dir = target.value.a.minus(projectile.a);
                 const n = dir.norm();
                 if (n < ds) {
-                    try toDelete.add(entry.value.target, {});
-                    try toDelete.add(entry.id, {});
+                    const monster = try self.monsters.get(entry.value.target);
+
+                    try toDelete.set(entry.value.target, {});
+                    try toDelete.set(entry.id, {});
+                    self.money += monster.price;
                     continue;
                 }
 
-                const dn = dir.mul(ds / n);
+                const dn = dir.scale(ds / n);
                 try self.engine.bounds.update(entry.id, projectile.translate(dn));
                 (try self.engine.sprites.get(entry.id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
             }
@@ -282,6 +336,7 @@ pub const Game = struct {
         try self.ui.update(frameAllocator);
 
         self.lastTicks = ticks;
+        self.towersUpdated = false;
     }
 
     pub fn render(_: *Game) !void {}

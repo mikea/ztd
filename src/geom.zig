@@ -24,7 +24,15 @@ pub const Vec2 = struct {
         return minus(to, from).normalized();
     }
 
-    pub fn mul(self: *const Vec2, a: f32) Vec2 {
+    pub fn ratio(v1: Vec2, v2: Vec2) Vec2 {
+        return .{ .x = v1.x / v2.x, .y = v1.y / v2.y };
+    }
+
+    pub fn mul(v1: Vec2, v2: Vec2) Vec2 {
+        return .{ .x = v1.x * v2.x, .y = v1.y * v2.y };
+    }
+
+    pub fn scale(self: *const Vec2, a: f32) Vec2 {
         return .{ .x = self.x * a, .y = self.y * a };
     }
 
@@ -71,6 +79,10 @@ pub const Vec2 = struct {
     pub fn max(self: *const Vec2, v: Vec2) Vec2 {
         return .{ .x = std.math.max(self.x, v.x), .y = std.math.max(self.y, v.y) };
     }
+
+    pub fn grid(self: *const Vec2, gridX: f32, gridY: f32) Vec2 {
+        return .{ .x = gridX * @floor(self.x / gridX), .y = gridY * @floor(self.y / gridY) };
+    }
 };
 
 pub const Rect = struct {
@@ -88,11 +100,11 @@ pub const Rect = struct {
     }
 
     pub fn centered(c: Vec2, aSize: Vec2) Rect {
-        const s2 = aSize.mul(1.0 / 2.0);
+        const s2 = aSize.scale(1.0 / 2.0);
         return .{ .a = c.minus(s2), .b = c.add(s2) };
     }
 
-    pub fn sized(o: Vec2, aSize: Vec2) Rect {
+    pub fn initSized(o: Vec2, aSize: Vec2) Rect {
         return .{ .a = o, .b = o.add(aSize) };
     }
 
@@ -136,6 +148,12 @@ pub const Rect = struct {
 
     pub fn area(self: *const Rect) f32 {
         return (self.b.x - self.a.x) * (self.b.y - self.a.y);
+    }
+
+    pub fn grid(self: *const Rect, gridX: f32, gridY: f32) Rect {
+        const c = self.center();
+        const sz = self.size();
+        return Rect.initCentered(gridX * @floor(c.x / gridX), gridY * @floor(c.y / gridY), sz.w, sz.h);
     }
 
     pub fn format(

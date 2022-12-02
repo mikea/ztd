@@ -50,7 +50,7 @@ const Statistics = struct {
         if (self.lastTicks == 0) {
             return;
         }
-        const x = self.engine.displaySize.x;
+        const x = self.engine.viewport.displaySize.x;
 
         const fps = try std.fmt.allocPrintZ(frameAllocator, "{d} fps", .{1000 / (ticks - self.lastTicks)});
         try self.engine.setText(self.fpsId, fps, .{ .x = x, .y = 0 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
@@ -113,16 +113,17 @@ pub fn main() !void {
     defer eng.deinit();
 
     var game = try Game.init(allocator, &eng, &resources);
+    defer allocator.destroy(game);
     defer game.deinit();
 
     if (args.len >= 2) {
         if (std.mem.eql(u8, args[1], "stress1")) {
-            try levels.initStress1(&game);
+            try levels.initStress1(game);
         } else {
-        try levels.initLevel1(&game, allocator);
+        try levels.initLevel1(game, allocator);
         }
     } else {
-        try levels.initLevel1(&game, allocator);
+        try levels.initLevel1(game, allocator);
     }
 
     var statistics = Statistics{.engine = &eng, .resources = &resources};
@@ -133,8 +134,8 @@ pub fn main() !void {
 
     // main loop
     while (true) {
-        if (eng.nextEvent()) |event| {
-            game.event(&event);
+        while (eng.nextEvent()) |event| {
+            try game.event(&event);
         }
         if (!eng.running) {
             break;
@@ -152,7 +153,7 @@ pub fn main() !void {
             }
             try eng.update(frameAllocator, ticks);
             try game.update(frameAllocator, ticks);
-            try statistics.update(ticks, frameAllocator, &game, lastUpdateDuration, lastRenderDuration);
+            try statistics.update(ticks, frameAllocator, game, lastUpdateDuration, lastRenderDuration);
         }
 
         {
