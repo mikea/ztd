@@ -22,9 +22,9 @@ pub const IdManager = struct {
             std.log.err("too many ids allocated: max={}", .{maxId});
             @panic("too many ids");
         }
-        const result = self.i;
+        // no id 0!
         self.i += 1;
-        return result;
+        return self.i;
     }
 };
 

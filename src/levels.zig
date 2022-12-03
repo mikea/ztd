@@ -64,7 +64,8 @@ pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
 
 fn addMonster(self: *Game, pos: Vec) !void {
     const id = self.engine.ids.nextId();
-    try self.monsters.set(id, .{ .speed = 10, .targetTower = id, .price = 1 });
+    try self.monsters.set(id, .{ .speed = 10, .price = 1 });
+    try self.attackers.set(id, .{ .target = 0, .range = 10, .attack = .{ .direct = .{ .damage = 1 } }, .attackDelayMs = 1000 });
     try self.healths.set(id, .{ .maxHealth = 100, .health = 100 });
     try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
     try self.engine.animations.set(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]sdl.SpriteSheet.Coords{

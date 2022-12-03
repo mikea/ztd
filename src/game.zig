@@ -18,29 +18,42 @@ const Vec = geom.Vec2;
 const Rect = geom.Rect;
 
 const Health = struct {
-    maxHealth: u32,
-    health: u32,
+    maxHealth: f32,
+    health: f32,
 };
 
 const Tower = struct {
-    range: f32,
-    fireDelay: u64,
-    missileSpeed: f32,
     upgradeCost: usize,
-    lastFire: u64 = 0,
-    targetMonster: Id, // equals to itself when no monster is found.
 };
 
 const Monster = struct {
     speed: f32,
-    targetTower: Id,
     price: usize,
 };
 
 const Projectile = struct {
     v: f32,
+    damage: f32,
     target: Id,
 };
+
+const Attacker = struct {
+    range: f32,
+    attack: union(AttackType) {
+        direct: struct {
+            damage: f32,
+        },
+        projectile: struct {
+            damage: f32,
+            speed: f32,
+        },
+    },
+    attackDelayMs: u64,
+    lastAttack: u64 = 0,
+    target: Id, // pointer to Health record
+};
+
+const AttackType = enum { direct, projectile };
 
 const Mode = enum {
     SELECT,
@@ -86,7 +99,8 @@ const UI = struct {
                             if (self.game.money >= upgradeCost) {
                                 self.game.money -= upgradeCost;
                                 tower.*.value.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, upgradeCost) * 1.5));
-                                tower.*.value.fireDelay = @floatToInt(usize, @round(@intToFloat(f32, tower.*.value.fireDelay) / 1.2));
+                                const attacker = try self.game.attackers.get(towerId);
+                                attacker.*.attackDelayMs = @floatToInt(usize, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.2));
                             }
                         }
                     }
@@ -154,7 +168,8 @@ const UI = struct {
             if (self.selectedTowerId) |towerId| {
                 if (self.game.towers.find(towerId)) |*tower| {
                     const pos = (try self.engine.bounds.get(towerId)).center();
-                    const range = tower.*.value.range;
+                    const attacker = try self.game.attackers.get(towerId);
+                    const range = attacker.range;
                     try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, range * 2, range * 2));
                     try self.engine.sprites.set(self.selId, try sdl.drawCircle(self.engine.renderer, range));
                     return tower.*.value;
@@ -169,8 +184,9 @@ const UI = struct {
     }
 };
 
-const MonstersTable = Table(Id, maxId, Monster);
+const AttackersTable = Table(Id, maxId, Attacker);
 const HealthsTable = Table(Id, maxId, Health);
+const MonstersTable = Table(Id, maxId, Monster);
 const TowersTable = Table(Id, maxId, Tower);
 const ProjectilesTable = Table(Id, maxId, Projectile);
 
@@ -180,10 +196,14 @@ pub const Game = struct {
 
     lastTicks: u32 = 0,
 
+    attackers: AttackersTable,
     healths: HealthsTable,
-    towers: TowersTable,
-    monsters: MonstersTable,
+
     projectiles: ProjectilesTable,
+    towers: TowersTable,
+
+    monsters: MonstersTable,
+
     ui: UI,
     towersUpdated: bool = false,
     money: usize = 0,
@@ -193,6 +213,7 @@ pub const Game = struct {
         game.* = .{
             .engine = eng,
             .resources = resources,
+            .attackers = try AttackersTable.init(allocator),
             .healths = try HealthsTable.init(allocator),
             .towers = try TowersTable.init(allocator),
             .monsters = try MonstersTable.init(allocator),
@@ -207,6 +228,7 @@ pub const Game = struct {
         self.monsters.deinit();
         self.towers.deinit();
         self.projectiles.deinit();
+        self.attackers.deinit();
     }
 
     fn delete(self: *Game, id: Id) !void {
@@ -215,6 +237,7 @@ pub const Game = struct {
         try self.engine.animations.delete(id);
 
         try self.healths.delete(id);
+        try self.attackers.delete(id);
         try self.monsters.delete(id);
         try self.towers.delete(id);
         try self.projectiles.delete(id);
@@ -223,15 +246,11 @@ pub const Game = struct {
     pub fn addTower(self: *Game, pos: Vec) !void {
         const id = self.engine.ids.nextId();
         const tower = Tower{
-            .range = 100,
-            .fireDelay = 500,
-            .missileSpeed = 500,
-            .targetMonster = id,
             .upgradeCost = 10,
         };
         try self.towers.set(id, tower);
         try self.healths.set(id, .{ .maxHealth = 100, .health = 100 });
-        // todo: no animation should be necessary for tower
+        try self.attackers.set(id, .{ .target = 0, .range = 100, .attackDelayMs = 500, .attack = .{ .projectile = .{ .damage = 50, .speed = 500 } } });
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
         try self.engine.sprites.set(id, self.resources.tower.sprite(0, 0, 0));
 
@@ -247,14 +266,14 @@ pub const Game = struct {
             // update closest monsters
             var it = self.towers.iterator();
             while (it.next()) |*entry| {
-                const tower = entry.*.value;
+                const attacker = try self.attackers.get(entry.*.id);
                 const pos = (try self.engine.bounds.get(entry.*.id)).center();
 
                 var collector: struct {
                     monsters: *MonstersTable,
                     pos: Vec,
-                    closestId: Id,
-                    closestDistance: f32,
+                    closestId: Id = 0,
+                    closestDistance: f32 = std.math.f32_max,
                     iter: usize = 0,
 
                     pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
@@ -269,10 +288,10 @@ pub const Game = struct {
                             s.closestId = id;
                         }
                     }
-                } = .{ .monsters = &self.monsters, .pos = pos, .closestId = entry.*.id, .closestDistance = std.math.f32_max };
+                } = .{ .monsters = &self.monsters, .pos = pos };
 
-                try self.engine.bounds.findIntersect(Rect.centered(pos, .{ .x = tower.range * 2, .y = tower.range * 2 }), @TypeOf(collector), &collector, @TypeOf(collector).callback);
-                entry.*.value.targetMonster = collector.closestId;
+                try self.engine.bounds.findIntersect(Rect.centered(pos, .{ .x = attacker.*.range * 2, .y = attacker.*.range * 2 }), @TypeOf(collector), &collector, @TypeOf(collector).callback);
+                attacker.*.target = collector.closestId;
             }
         }
     }
@@ -280,14 +299,14 @@ pub const Game = struct {
     fn updateMonsters(self: *Game, ticks: u32) !void {
         const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
 
-        // update state
+        // move monsters
         var it = self.monsters.iterator();
         while (it.next()) |*entry| {
-            const monster = &entry.*.value;
             const bound = try self.engine.bounds.get(entry.*.id);
             const loc = bound.center();
+            const attacker = try self.attackers.get(entry.*.id);
 
-            if (self.towersUpdated or self.towers.find(monster.targetTower) == null) {
+            if (self.towersUpdated or self.towers.find(attacker.*.target) == null) {
                 // find closest tower
                 // todo: make this faster
 
@@ -297,93 +316,121 @@ pub const Game = struct {
                     var towerLoc = (try self.engine.bounds.get(towerEntry.*.id)).center();
                     var d = loc.dist2(towerLoc);
                     if (d < closestD) {
-                        monster.targetTower = towerEntry.*.id;
+                        attacker.*.target = towerEntry.*.id;
                         closestD = d;
                     }
                 }
             }
 
-            const targetLoc = (try self.engine.bounds.get(monster.targetTower)).center();
+            const targetLoc = (try self.engine.bounds.get(attacker.*.target)).center();
             const d = Vec.minus(targetLoc, loc);
-            const n = d.norm();
-            if (n > 1.0e-2) {
-                const dn = d.scale(entry.*.value.speed * dt / n);
+            const range = d.norm();
+            if (range > attacker.*.range) {
+                const ds = std.math.min(attacker.*.range, entry.*.value.speed * dt);
+                const dn = d.scale(ds / range);
                 try self.engine.bounds.update(entry.*.id, bound.translate(dn));
             }
         }
     }
 
-    fn updateTowers(self: *Game, ticks: u32) !void {
+    fn updateTowers(self: *Game) !void {
         try self.updateTowerTargets();
+    }
 
-        {
-            // fire from towers
-            var it = self.towers.iterator();
-            while (it.next()) |entry| {
-                const tower = &entry.value;
-                const pos = (try self.engine.bounds.get(entry.id)).center();
+    fn updateAttackers(self: *Game, ticks: u32) !void {
+        var it = self.attackers.iterator();
+        while (it.next()) |*entry| {
+            const pos = (try self.engine.bounds.get(entry.*.id)).center();
+            const attacker = &entry.*.value;
 
-                if (tower.targetMonster == entry.id or
-                    ticks - tower.lastFire < tower.fireDelay)
-                {
-                    continue;
-                }
+            if (ticks - attacker.*.lastAttack < attacker.*.attackDelayMs) {
+                continue;
+            }
 
-                const target = try self.engine.bounds.get(tower.targetMonster);
+            if (self.healths.find(attacker.target)) |targetHealth| {
+                const target = try self.engine.bounds.get(attacker.target);
                 const d = pos.dist(target.center());
-                if (d > tower.range) {
+                if (d > attacker.range) {
                     continue;
                 }
 
-                tower.lastFire = ticks;
-                const id = self.engine.ids.nextId();
-                try self.projectiles.set(id, .{ .target = tower.targetMonster, .v = tower.missileSpeed });
-                try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-                try self.engine.sprites.set(id, self.resources.fireballProjectile.sprite(0, 0, 90));
+                attacker.*.lastAttack = ticks;
+                switch (attacker.attack) {
+                    .direct => {
+                        targetHealth.*.value.health -= attacker.attack.direct.damage;
+                    },
+                    .projectile => |*projectile| {
+                        const id = self.engine.ids.nextId();
+                        try self.projectiles.set(id, .{ .target = attacker.target, .v = projectile.speed, .damage =  projectile.damage });
+                        try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
+                        try self.engine.sprites.set(id, self.resources.fireballProjectile.sprite(0, 0, 90));
+                    }
+                }
             }
         }
     }
 
-    fn updateProjectiles(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
+    fn updateProjectiles(self: *Game, ticks: u32) !void {
         {
             // move projectiles
             const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
-            var toDelete = try SparseSet(Id, maxId, void).init(frameAllocator);
-            defer toDelete.deinit();
 
             var it = self.projectiles.iterator();
-            while (it.next()) |entry| {
-                // std.log.debug("projection entry: {}", .{entry});
-                const projectile = try self.engine.bounds.get(entry.id);
-                const target = self.engine.bounds.find(entry.value.target) orelse {
-                    // this projectile's target doesn't exist anymore, delete it.
-                    try toDelete.set(entry.id, {});
-                    continue;
-                };
+            while (it.next()) |*entry| {
+                const id = entry.*.id;
+                const projectile = try self.engine.bounds.get(id);
 
-                const ds = entry.value.v * dt;
-
-                const dir = target.value.a.minus(projectile.a);
-                const n = dir.norm();
-                if (n < ds) {
-                    const monster = try self.monsters.get(entry.value.target);
-
-                    try toDelete.set(entry.value.target, {});
-                    try toDelete.set(entry.id, {});
-                    self.money += monster.price;
-                    continue;
+                if (self.healths.find(entry.*.value.target)) |*targetHealth| {
+                    const target = (try self.engine.bounds.get(entry.*.value.target)).center();
+                    const ds = entry.*.value.v * dt;
+                    const dir = target.minus(projectile.center());
+                    const n = dir.norm();
+                    if (n < ds) {
+                        targetHealth.*.value.health -= entry.*.value.damage;
+                    } else {
+                        const dn = dir.scale(ds / n);
+                        try self.engine.bounds.update(id, projectile.translate(dn));
+                        (try self.engine.sprites.get(id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
+                    }
+                } else {
+                    // will self-destruct
+                    entry.*.value.target = 0;
                 }
-
-                const dn = dir.scale(ds / n);
-                try self.engine.bounds.update(entry.id, projectile.translate(dn));
-                (try self.engine.sprites.get(entry.id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
             }
+        }
+    }
 
-            var toDeleteIt = toDelete.iterator();
-            while (toDeleteIt.next()) |entry| {
-                // std.log.debug("deleting: {}", .{entry.id});
-                try self.delete(entry.id);
+    pub fn updateDead(self: *Game, frameAllocator: std.mem.Allocator) !void {
+        var toDelete = try SparseSet(Id, maxId, void).init(frameAllocator);
+        defer toDelete.deinit();
+
+        {
+            // remove 0 health
+            var it = self.healths.iterator();
+            while (it.next()) |*entry| {
+                if (entry.*.value.health <= 0) {
+                    try toDelete.set(entry.*.id, {});
+                    if (self.monsters.find(entry.*.id)) |*monster| {
+                        self.money += monster.*.value.price;
+                    }
+                }
             }
+        }
+
+        {
+            // remove projectiles that lost their target
+            var it = self.projectiles.iterator();
+            while (it.next()) |*entry| {
+                if (entry.*.value.target == 0) {
+                    try toDelete.set(entry.*.id, {});
+                }
+            }
+        }
+
+        var toDeleteIt = toDelete.iterator();
+        while (toDeleteIt.next()) |entry| {
+            // std.log.debug("deleting: {}", .{entry.id});
+            try self.delete(entry.id);
         }
     }
 
@@ -394,10 +441,21 @@ pub const Game = struct {
         }
 
         try self.updateMonsters(ticks);
-        try self.updateTowers(ticks);
-        try self.updateProjectiles(frameAllocator, ticks);
-
+        try self.updateTowers();
+        try self.updateAttackers(ticks);
+        try self.updateProjectiles(ticks);
+        try self.updateDead(frameAllocator);
         try self.ui.update(frameAllocator);
+
+        if (self.monsters.size() == 0) {
+            std.log.info("YOU WON!!!!\n", .{});
+            std.c.exit(0);
+        }
+
+        if (self.towers.size() == 0) {
+            std.debug.print("YOU LOST!!!!\n", .{});
+            std.c.exit(0);
+        }
 
         self.lastTicks = ticks;
         self.towersUpdated = false;
