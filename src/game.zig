@@ -26,6 +26,7 @@ const Tower = struct {
     range: f32,
     fireDelay: u64,
     missileSpeed: f32,
+    upgradeCost: usize,
     lastFire: u64 = 0,
     targetMonster: Id, // equals to itself when no monster is found.
 };
@@ -77,6 +78,19 @@ const UI = struct {
                     self.mode = Mode.SELECT;
                     self.selectedTowerId = null;
                 },
+                sdl.sdl.SDLK_1 => {
+                    if (self.mode != Mode.SELECT) return;
+                    if (self.selectedTowerId) |towerId| {
+                        if (self.game.towers.find(towerId)) |*tower| {
+                            const upgradeCost = tower.*.value.upgradeCost;
+                            if (self.game.money >= upgradeCost) {
+                                self.game.money -= upgradeCost;
+                                tower.*.value.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, upgradeCost) * 1.5));
+                                tower.*.value.fireDelay = @floatToInt(usize, @round(@intToFloat(f32, tower.*.value.fireDelay) / 1.2));
+                            }
+                        }
+                    }
+                },
                 else => {},
             },
             sdl.sdl.SDL_MOUSEBUTTONDOWN => {
@@ -111,11 +125,19 @@ const UI = struct {
     }
 
     fn update(self: *@This(), frameAllocator: std.mem.Allocator) !void {
-        // update ui text
-        const text = try std.fmt.allocPrintZ(frameAllocator, "mode: {}\n$ {}", .{self.mode, self.game.money});
-        try self.engine.setText(self.textId, text, .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+        const selectedTower = try self.updateSelection();
 
-        try self.updateSelection();
+        // update ui text
+        const commonText = try std.fmt.allocPrintZ(frameAllocator, "mode: {}\n$ {}", .{ self.mode, self.game.money });
+
+        const text = switch (self.mode) {
+            Mode.BUILD => commonText,
+            Mode.SELECT => if (selectedTower) |tower|
+                try std.fmt.allocPrintZ(frameAllocator, "{s}\n1 - upgrade $ {}", .{ commonText, tower.upgradeCost })
+            else
+                commonText,
+        };
+        try self.engine.setText(self.textId, text, .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
         // update build shadow
         if (self.mode == Mode.BUILD) {
@@ -127,7 +149,7 @@ const UI = struct {
         }
     }
 
-    fn updateSelection(self: *@This()) !void {
+    fn updateSelection(self: *@This()) !?Tower {
         if (self.mode == Mode.SELECT) {
             if (self.selectedTowerId) |towerId| {
                 if (self.game.towers.find(towerId)) |*tower| {
@@ -135,7 +157,7 @@ const UI = struct {
                     const range = tower.*.value.range;
                     try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, range * 2, range * 2));
                     try self.engine.sprites.set(self.selId, try sdl.drawCircle(self.engine.renderer, range));
-                    return;
+                    return tower.*.value;
                 }
             }
         }
@@ -143,6 +165,7 @@ const UI = struct {
         self.selectedTowerId = null;
         try self.engine.bounds.delete(self.selId);
         try self.engine.sprites.delete(self.selId);
+        return null;
     }
 };
 
@@ -199,7 +222,13 @@ pub const Game = struct {
 
     pub fn addTower(self: *Game, pos: Vec) !void {
         const id = self.engine.ids.nextId();
-        const tower = Tower{ .range = 100, .fireDelay = 500, .missileSpeed = 500, .targetMonster = id };
+        const tower = Tower{
+            .range = 100,
+            .fireDelay = 500,
+            .missileSpeed = 500,
+            .targetMonster = id,
+            .upgradeCost = 10,
+        };
         try self.towers.set(id, tower);
         try self.healths.set(id, .{ .maxHealth = 100, .health = 100 });
         // todo: no animation should be necessary for tower

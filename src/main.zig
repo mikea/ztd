@@ -83,7 +83,8 @@ pub fn main() !void {
     try checkInt(sdl.TTF_Init());
     defer sdl.TTF_Quit();
 
-    var renderer = try checkNotNull(sdl.SDL_Renderer, sdl.SDL_CreateRenderer(window, -1, sdl.SDL_RENDERER_ACCELERATED | sdl.SDL_RENDERER_PRESENTVSYNC));
+    //  | sdl.SDL_RENDERER_PRESENTVSYNC
+    var renderer = try checkNotNull(sdl.SDL_Renderer, sdl.SDL_CreateRenderer(window, -1, sdl.SDL_RENDERER_ACCELERATED));
     defer sdl.SDL_DestroyRenderer(renderer);
 
     var resources = try Resources.init(renderer);
