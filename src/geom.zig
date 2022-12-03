@@ -137,7 +137,7 @@ pub const Rect = struct {
         return self.b.y - self.a.y;
     }
 
-    fn contains(self: *const Rect, v: Vec2) bool {
+    pub fn contains(self: *const Rect, v: Vec2) bool {
         return v.x >= self.a.x and v.x <= self.b.x and v.y >= self.a.y and v.y <= self.b.y;
     }
 

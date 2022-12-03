@@ -64,10 +64,10 @@ pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
 
 fn addMonster(self: *Game, pos: Vec) !void {
     const id = self.engine.ids.nextId();
-    try self.monsters.add(id, .{ .speed = 10, .targetTower = id, .price = 1 });
-    try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
-    try self.engine.bounds.add(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-    try self.engine.animations.add(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]sdl.SpriteSheet.Coords{
+    try self.monsters.set(id, .{ .speed = 10, .targetTower = id, .price = 1 });
+    try self.healths.set(id, .{ .maxHealth = 100, .health = 100 });
+    try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
+    try self.engine.animations.set(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]sdl.SpriteSheet.Coords{
         .{ .x = 2, .y = 0 },
         .{ .x = 3, .y = 0 },
         .{ .x = 4, .y = 0 },
@@ -106,7 +106,7 @@ pub fn initStress1(self: *Game) !void {
         const id = self.engine.ids.nextId();
 
         // add keep
-        try self.engine.bounds.add(id, Rect.initCentered(0, 0, 16, 16));
-        try self.engine.sprites.add(id, self.resources.woodKeep.sprite(0, 0, 0));
+        try self.engine.bounds.set(id, Rect.initCentered(0, 0, 16, 16));
+        try self.engine.sprites.set(id, self.resources.woodKeep.sprite(0, 0, 0));
     }
 }

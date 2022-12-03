@@ -185,7 +185,7 @@ pub const Engine = struct {
                 animation.lastFrame = ticks;
             }
             const coords = animation.sprites[animation.i];
-            try self.sprites.add(entry.id, animation.sheet.sprite(coords.x, coords.y, 0));
+            try self.sprites.set(entry.id, animation.sheet.sprite(coords.x, coords.y, 0));
         }
     }
 
@@ -266,6 +266,6 @@ pub const Engine = struct {
             Alignment.CENTER => pos.minus(.{ .x = w / 2, .y = 0 }),
             Alignment.RIGHT => pos.minus(.{ .x = w, .y = 0 }),
         };
-        try self.texts.add(id, .{ .surface = surface, .pos = alignedPos, .alignment = alignment, .texture = null });
+        try self.texts.set(id, .{ .surface = surface, .pos = alignedPos, .alignment = alignment, .texture = null });
     }
 };

@@ -5,7 +5,7 @@ const std = @import("std");
 const geom = @import("geom.zig");
 const SparseSet = @import("sparse_set.zig").SparseSet;
 
-const Vec2 = geom.Vec2;
+const Vec = geom.Vec2;
 const Rect = geom.Rect;
 const inf = std.math.inf_f32;
 const assert = std.debug.assert;
@@ -171,6 +171,21 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
                 },
             }
         }
+
+        pub fn findPoint(self: *const @This(), p: Vec, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
+            switch (self.items) {
+                .leaf => |entries| for (entries[0..self.len]) |entry| {
+                    if (entry.rect.contains(p)) {
+                        try callback(callbackThis, entry.id, entry.rect);
+                    }
+                },
+                .middle => |children| for (children[0..self.len]) |child| {
+                    if (child.rect.contains(p)) {
+                        try child.findPoint(p, CallbackThis, callbackThis, callback);
+                    }
+                },
+            }
+        }
     };
 
     return struct {
@@ -298,6 +313,14 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
                 return;
             }
             try self.root.findIntersect(rect, CallbackThis, callbackThis, callback);
+        }
+
+
+        pub fn findPoint(self: *const @This(), p: Vec, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
+            if (!self.root.rect.contains(p)) {
+                return;
+            }
+            try self.root.findPoint(p, CallbackThis, callbackThis, callback);
         }
 
         pub fn delete(self: *@This(), id: Id) !void {

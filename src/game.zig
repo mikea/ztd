@@ -55,6 +55,9 @@ const UI = struct {
     modeId: Id,
     shadowId: Id,
     moneyId: Id,
+    selId: Id,
+
+    selectedTowerId: ?Id = null,
 
     pub fn init(game: *Game) !@This() {
         return .{
@@ -64,6 +67,7 @@ const UI = struct {
             .modeId = game.engine.ids.nextId(),
             .shadowId = game.engine.ids.nextId(),
             .moneyId = game.engine.ids.nextId(),
+            .selId = game.engine.ids.nextId(),
         };
     }
 
@@ -75,10 +79,30 @@ const UI = struct {
                 else => {},
             },
             sdl.sdl.SDL_MOUSEBUTTONDOWN => {
-                if (self.mode == Mode.BUILD and self.game.money >= 10) {
-                    // self.mode = Mode.SELECT;
-                    try self.game.addTower(self.engine.mousePos.grid(8, 8));
-                    self.game.money -= 10;
+                switch (self.mode) {
+                    Mode.BUILD => if (self.game.money >= 10) {
+                        self.mode = Mode.SELECT;
+                        self.selectedTowerId = null;
+                        try self.game.addTower(self.engine.mousePos.grid(8, 8));
+                        self.game.money -= 10;
+                    },
+                    Mode.SELECT => {
+                        var towerFinder: struct {
+                            towers: *TowersTable,
+                            towerId: ?Id = null,
+
+                            pub fn callback(s: *@This(), id: Id, _: Rect) error{OutOfMemory}!void {
+                                if (s.towers.find(id) != null) {
+                                    s.towerId = id;
+                                }
+                            }
+                        } = .{
+                            .towers = &self.game.towers,
+                        };
+
+                        try self.engine.bounds.findPoint(self.engine.mousePos, @TypeOf(towerFinder), &towerFinder, @TypeOf(towerFinder).callback);
+                        self.selectedTowerId = towerFinder.towerId;
+                    },
                 }
             },
             else => {},
@@ -86,28 +110,50 @@ const UI = struct {
     }
 
     fn update(self: *@This(), frameAllocator: std.mem.Allocator) !void {
+        // update ui text
         const mode = try std.fmt.allocPrintZ(frameAllocator, "mode: {}", .{self.mode});
         try self.engine.setText(self.modeId, mode, .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
         const money = try std.fmt.allocPrintZ(frameAllocator, "$ {}", .{self.game.money});
         try self.engine.setText(self.moneyId, money, .{ .x = 0, .y = 20 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
+        try self.updateSelection();
+
+        // update build shadow
         if (self.mode == Mode.BUILD) {
             try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
-            try self.engine.sprites.add(self.shadowId, self.resources.tower.sprite(0, 0, 0));
+            try self.engine.sprites.set(self.shadowId, self.resources.tower.sprite(0, 0, 0));
         } else {
             try self.engine.bounds.delete(self.shadowId);
             try self.engine.sprites.delete(self.shadowId);
         }
     }
+
+    fn updateSelection(self: *@This()) !void {
+        if (self.mode == Mode.SELECT) {
+            if (self.selectedTowerId) |towerId| {
+                if (self.game.towers.find(towerId)) |*tower| {
+                    const pos = (try self.engine.bounds.get(towerId)).center();
+                    const range = tower.*.value.range;
+                    try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, range * 2, range * 2));
+                    try self.engine.sprites.set(self.selId, try sdl.drawCircle(self.engine.renderer, range));
+                    return;
+                }
+            }
+        }
+
+        self.selectedTowerId = null;
+        try self.engine.bounds.delete(self.selId);
+        try self.engine.sprites.delete(self.selId);
+    }
 };
 
-pub const Game = struct {
-    const MonstersTable = Table(Id, maxId, Monster);
-    const HealthsTable = Table(Id, maxId, Health);
-    const TowersTable = Table(Id, maxId, Tower);
-    const ProjectilesTable = Table(Id, maxId, Projectile);
+const MonstersTable = Table(Id, maxId, Monster);
+const HealthsTable = Table(Id, maxId, Health);
+const TowersTable = Table(Id, maxId, Tower);
+const ProjectilesTable = Table(Id, maxId, Projectile);
 
+pub const Game = struct {
     engine: *engine.Engine,
     resources: *Resources,
 
@@ -156,15 +202,11 @@ pub const Game = struct {
     pub fn addTower(self: *Game, pos: Vec) !void {
         const id = self.engine.ids.nextId();
         const tower = Tower{ .range = 100, .fireDelay = 500, .missileSpeed = 500, .targetMonster = id };
-        try self.towers.add(id, tower);
-        try self.healths.add(id, .{ .maxHealth = 100, .health = 100 });
+        try self.towers.set(id, tower);
+        try self.healths.set(id, .{ .maxHealth = 100, .health = 100 });
         // todo: no animation should be necessary for tower
-        try self.engine.bounds.add(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-        try self.engine.sprites.add(id, self.resources.tower.sprite(0, 0, 0));
-
-        const rangeId = self.engine.ids.nextId();
-        try self.engine.bounds.add(rangeId, Rect.initCentered(pos.x, pos.y, tower.range * 2, tower.range * 2));
-        try self.engine.sprites.add(rangeId, try sdl.drawCircle(self.engine.renderer, tower.range));
+        try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
+        try self.engine.sprites.set(id, self.resources.tower.sprite(0, 0, 0));
 
         self.towersUpdated = true;
     }
@@ -268,14 +310,9 @@ pub const Game = struct {
 
                 tower.lastFire = ticks;
                 const id = self.engine.ids.nextId();
-                try self.projectiles.add(id, .{ .target = tower.targetMonster, .v = tower.missileSpeed });
-                try self.engine.bounds.add(id, Rect.initCentered(
-                    pos.x,
-                    pos.y,
-                    8,
-                    8,
-                ));
-                try self.engine.sprites.add(id, self.resources.fireballProjectile.sprite(0, 0, 90));
+                try self.projectiles.set(id, .{ .target = tower.targetMonster, .v = tower.missileSpeed });
+                try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
+                try self.engine.sprites.set(id, self.resources.fireballProjectile.sprite(0, 0, 90));
             }
         }
     }

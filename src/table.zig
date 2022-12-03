@@ -2,6 +2,7 @@ const std = @import("std");
 const SparseSet = @import("sparse_set.zig").SparseSet;
 const geom = @import("geom.zig");
 const Rect = geom.Rect;
+const Vec = geom.Vec2;
 const RTree = @import("r_tree.zig").RTree;
 
 pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
@@ -20,7 +21,7 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
             self.sparse.deinit();
         }
 
-        pub fn add(self: *@This(), id: Id, t: T) !void {
+        pub fn set(self: *@This(), id: Id, t: T) !void {
             return self.sparse.set(id, t);
         }
 
@@ -104,6 +105,10 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
 
         pub fn findIntersect(self: *const @This(), rect: Rect, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
             try self.tree.findIntersect(rect, CallbackThis, callbackThis, callback);
+        }
+
+        pub fn findPoint(self: *const @This(), p: Vec, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
+            try self.tree.findPoint(p, CallbackThis, callbackThis, callback);
         }
     };
 }
