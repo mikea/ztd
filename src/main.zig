@@ -24,49 +24,30 @@ const AppError = error{
     ResourceError,
 };
 
-
 const Statistics = struct {
     engine: *engine.Engine,
     resources: *Resources,
 
     lastTicks: u32 = 0,
-    fpsId: Id = 0,
-    monstersId: Id = 0,
-    updateId: Id = 0,
-    monsterUpdateId: Id = 0,
-    renderId: Id = 0,
+    textId: Id = 0,
 
     pub fn init(self: *Statistics) !void {
-        self.fpsId = self.engine.ids.nextId();
-        self.monstersId = self.engine.ids.nextId();
-        self.updateId = self.engine.ids.nextId();
-        self.monsterUpdateId = self.engine.ids.nextId();
-        self.renderId = self.engine.ids.nextId();
+        self.textId = self.engine.ids.nextId();
     }
 
     pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, game: *Game, updateDurationNs: u64, renderDuration: u64) !void {
         defer self.lastTicks = ticks;
-
         if (self.lastTicks == 0) {
             return;
         }
-        const x = self.engine.viewport.displaySize.x;
-
-        const fps = try std.fmt.allocPrintZ(frameAllocator, "{d} fps", .{1000 / (ticks - self.lastTicks)});
-        try self.engine.setText(self.fpsId, fps, .{ .x = x, .y = 0 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-
-        const monsters = try std.fmt.allocPrintZ(frameAllocator, "{} monsters", .{game.monsters.size()});
-        try self.engine.setText(self.monstersId, monsters, .{ .x = x, .y = 20 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-
-        const updateText = try std.fmt.allocPrintZ(frameAllocator, "{d:.0} ms/update", .{ @intToFloat(f64, updateDurationNs) / 1000000});
-        try self.engine.setText(self.updateId, updateText, .{ .x = x, .y = 40 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-
-        const nsPerMonster = @intToFloat(f64, updateDurationNs) / @intToFloat(f64, game.monsters.size());
-        const msMonsterText = try std.fmt.allocPrintZ(frameAllocator, "{e:.0} monsters/sec", .{ 1.0e9 / nsPerMonster});
-        try self.engine.setText(self.monsterUpdateId, msMonsterText, .{ .x = x, .y = 60 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-
-        const renderText = try std.fmt.allocPrintZ(frameAllocator, "{d:.0} ms/render", .{ @intToFloat(f64, renderDuration) / 1000000});
-        try self.engine.setText(self.renderId, renderText, .{ .x = x, .y = 80 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+        const text = try std.fmt.allocPrintZ(frameAllocator, "{d} fps\n{} monsters\n{d:.0} ms/update\n{e:.0} monsters/sec\n{d:.0} ms/render", .{
+            1000 / (ticks - self.lastTicks),
+            game.monsters.size(),
+            @intToFloat(f64, updateDurationNs) / 1000000,
+            @intToFloat(f64, updateDurationNs) / @intToFloat(f64, game.monsters.size()),
+            @intToFloat(f64, renderDuration) / 1000000,
+        });
+        try self.engine.setText(self.textId, text, .{ .x = self.engine.viewport.displaySize.x, .y = 0 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
     }
 };
 
@@ -84,7 +65,6 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     std.debug.print("Arguments: {s}\n", .{args});
-
 
     try checkInt(sdl.SDL_Init(sdl.SDL_INIT_VIDEO));
     defer {
@@ -120,13 +100,13 @@ pub fn main() !void {
         if (std.mem.eql(u8, args[1], "stress1")) {
             try levels.initStress1(game);
         } else {
-        try levels.initLevel1(game, allocator);
+            try levels.initLevel1(game, allocator);
         }
     } else {
         try levels.initLevel1(game, allocator);
     }
 
-    var statistics = Statistics{.engine = &eng, .resources = &resources};
+    var statistics = Statistics{ .engine = &eng, .resources = &resources };
     try statistics.init();
 
     var lastUpdateDuration: u64 = 0;
@@ -144,7 +124,7 @@ pub fn main() !void {
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const frameAllocator = arena.allocator();
-        
+
         const ticks = sdl.SDL_GetTicks();
         {
             var timer = try std.time.Timer.start();
@@ -161,10 +141,10 @@ pub fn main() !void {
             defer {
                 lastRenderDuration = timer.read();
             }
-    
+
             try eng.render();
             try game.render();
-        }        
+        }
         sdl.SDL_RenderPresent(renderer);
     }
 }

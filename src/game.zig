@@ -52,9 +52,8 @@ const UI = struct {
     game: *Game,
 
     mode: Mode = Mode.SELECT,
-    modeId: Id,
+    textId: Id,
     shadowId: Id,
-    moneyId: Id,
     selId: Id,
 
     selectedTowerId: ?Id = null,
@@ -64,9 +63,8 @@ const UI = struct {
             .game = game,
             .engine = game.engine,
             .resources = game.resources,
-            .modeId = game.engine.ids.nextId(),
+            .textId = game.engine.ids.nextId(),
             .shadowId = game.engine.ids.nextId(),
-            .moneyId = game.engine.ids.nextId(),
             .selId = game.engine.ids.nextId(),
         };
     }
@@ -75,7 +73,10 @@ const UI = struct {
         switch (e.type) {
             sdl.sdl.SDL_KEYDOWN => switch (e.key.keysym.sym) {
                 sdl.sdl.SDLK_b => self.mode = Mode.BUILD,
-                sdl.sdl.SDLK_ESCAPE => self.mode = Mode.SELECT,
+                sdl.sdl.SDLK_ESCAPE => {
+                    self.mode = Mode.SELECT;
+                    self.selectedTowerId = null;
+                },
                 else => {},
             },
             sdl.sdl.SDL_MOUSEBUTTONDOWN => {
@@ -111,11 +112,8 @@ const UI = struct {
 
     fn update(self: *@This(), frameAllocator: std.mem.Allocator) !void {
         // update ui text
-        const mode = try std.fmt.allocPrintZ(frameAllocator, "mode: {}", .{self.mode});
-        try self.engine.setText(self.modeId, mode, .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-
-        const money = try std.fmt.allocPrintZ(frameAllocator, "$ {}", .{self.game.money});
-        try self.engine.setText(self.moneyId, money, .{ .x = 0, .y = 20 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+        const text = try std.fmt.allocPrintZ(frameAllocator, "mode: {}\n$ {}", .{self.mode, self.game.money});
+        try self.engine.setText(self.textId, text, .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
 
         try self.updateSelection();
 

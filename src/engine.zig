@@ -259,7 +259,7 @@ pub const Engine = struct {
             entry.value.destroy();
         }
 
-        const surface = sdl.TTF_RenderText_Solid(font, @as([*:0]const u8, text), color);
+        const surface = sdl.TTF_RenderText_Solid_Wrapped(font, @as([*:0]const u8, text), color, 0);
         const w = @intToFloat(f32, surface.*.w);
         const alignedPos = switch (alignment) {
             Alignment.LEFT => pos,
