@@ -2,7 +2,7 @@ const std = @import("std");
 
 const geom = @import("geom.zig");
 const Rect = geom.Rect;
-const Vec = geom.Vec2;
+const Vec = geom.Vec;
 
 const Game = @import("game.zig").Game;
 

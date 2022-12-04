@@ -2,7 +2,7 @@ const std = @import("std");
 const SparseSet = @import("sparse_set.zig").SparseSet;
 const geom = @import("geom.zig");
 const Rect = geom.Rect;
-const Vec = geom.Vec2;
+const Vec = geom.Vec;
 const RTree = @import("r_tree.zig").RTree;
 
 pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {

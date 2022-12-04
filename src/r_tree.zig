@@ -5,7 +5,7 @@ const std = @import("std");
 const geom = @import("geom.zig");
 const SparseSet = @import("sparse_set.zig").SparseSet;
 
-const Vec = geom.Vec2;
+const Vec = geom.Vec;
 const Rect = geom.Rect;
 const inf = std.math.inf_f32;
 const assert = std.debug.assert;

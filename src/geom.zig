@@ -1,60 +1,60 @@
 const std = @import("std");
 
-pub const Vec2 = struct {
+pub const Vec = struct {
     x: f32,
     y: f32,
 
-    pub fn add(a: Vec2, b: Vec2) Vec2 {
+    pub fn add(a: Vec, b: Vec) Vec {
         return .{ .x = a.x + b.x, .y = a.y + b.y };
     }
 
-    pub fn minus(a: Vec2, b: Vec2) Vec2 {
+    pub fn minus(a: Vec, b: Vec) Vec {
         return .{ .x = a.x - b.x, .y = a.y - b.y };
     }
 
-    pub fn dist(from: Vec2, to: Vec2) f32 {
+    pub fn dist(from: Vec, to: Vec) f32 {
         return minus(to, from).norm();
     }
 
-    pub fn dist2(from: Vec2, to: Vec2) f32 {
+    pub fn dist2(from: Vec, to: Vec) f32 {
         return minus(to, from).norm2();
     }
 
-    pub fn dir(from: Vec2, to: Vec2) Vec2 {
+    pub fn dir(from: Vec, to: Vec) Vec {
         return minus(to, from).normalized();
     }
 
-    pub fn ratio(v1: Vec2, v2: Vec2) Vec2 {
+    pub fn ratio(v1: Vec, v2: Vec) Vec {
         return .{ .x = v1.x / v2.x, .y = v1.y / v2.y };
     }
 
-    pub fn mul(v1: Vec2, v2: Vec2) Vec2 {
+    pub fn mul(v1: Vec, v2: Vec) Vec {
         return .{ .x = v1.x * v2.x, .y = v1.y * v2.y };
     }
 
-    pub fn scale(self: *const Vec2, a: f32) Vec2 {
+    pub fn scale(self: *const Vec, a: f32) Vec {
         return .{ .x = self.x * a, .y = self.y * a };
     }
 
-    pub fn norm(self: *const Vec2) f32 {
+    pub fn norm(self: *const Vec) f32 {
         return @sqrt(self.x * self.x + self.y * self.y);
     }
 
-    pub fn norm2(self: *const Vec2) f32 {
+    pub fn norm2(self: *const Vec) f32 {
         return self.x * self.x + self.y * self.y;
     }
 
-    fn normalized(self: *const Vec2) Vec2 {
+    fn normalized(self: *const Vec) Vec {
         const n = self.norm();
         return .{ .x = self.x / n, .y = self.y / n };
     }
 
-    fn area(self: *const Vec2) f32 {
+    fn area(self: *const Vec) f32 {
         return std.math.fabs(self.x * self.y);
     }
 
     pub fn format(
-        self: Vec2,
+        self: Vec,
         comptime fmt: []const u8,
         options: std.fmt.FormatOptions,
         writer: anytype,
@@ -68,26 +68,26 @@ pub const Vec2 = struct {
         });
     }
 
-    pub fn angle(self: *const Vec2) f32 {
+    pub fn angle(self: *const Vec) f32 {
         return std.math.atan2(f32, self.y, self.x);
     }
 
-    pub fn min(self: *const Vec2, v: Vec2) Vec2 {
+    pub fn min(self: *const Vec, v: Vec) Vec {
         return .{ .x = std.math.min(self.x, v.x), .y = std.math.min(self.y, v.y) };
     }
 
-    pub fn max(self: *const Vec2, v: Vec2) Vec2 {
+    pub fn max(self: *const Vec, v: Vec) Vec {
         return .{ .x = std.math.max(self.x, v.x), .y = std.math.max(self.y, v.y) };
     }
 
-    pub fn grid(self: *const Vec2, gridX: f32, gridY: f32) Vec2 {
+    pub fn grid(self: *const Vec, gridX: f32, gridY: f32) Vec {
         return .{ .x = gridX * @floor(self.x / gridX), .y = gridY * @floor(self.y / gridY) };
     }
 };
 
 pub const Rect = struct {
-    a: Vec2,
-    b: Vec2,
+    a: Vec,
+    b: Vec,
 
     pub fn init(x1: f32, y1: f32, x2: f32, y2: f32) Rect {
         return .{ .a = .{ .x = x1, .y = y1 }, .b = .{ .x = x2, .y = y2 } };
@@ -99,12 +99,12 @@ pub const Rect = struct {
         return .{ .a = .{ .x = x - w2, .y = y - h2 }, .b = .{ .x = x + w2, .y = y + h2 } };
     }
 
-    pub fn centered(c: Vec2, aSize: Vec2) Rect {
+    pub fn centered(c: Vec, aSize: Vec) Rect {
         const s2 = aSize.scale(1.0 / 2.0);
         return .{ .a = c.minus(s2), .b = c.add(s2) };
     }
 
-    pub fn initSized(o: Vec2, aSize: Vec2) Rect {
+    pub fn initSized(o: Vec, aSize: Vec) Rect {
         return .{ .a = o, .b = o.add(aSize) };
     }
 
@@ -121,15 +121,15 @@ pub const Rect = struct {
         return true;
     }
 
-    pub fn size(self: *const Rect) Vec2 {
+    pub fn size(self: *const Rect) Vec {
         return self.b.minus(self.a);
     }
 
-    pub fn center(self: *const Rect) Vec2 {
+    pub fn center(self: *const Rect) Vec {
         return .{ .x = (self.a.x + self.b.x) / 2, .y = (self.a.y + self.b.y) / 2 };
     }
 
-    pub fn translate(self: *const Rect, v: Vec2) Rect {
+    pub fn translate(self: *const Rect, v: Vec) Rect {
         return .{ .a = self.a.add(v), .b = self.b.add(v) };
     }
 
@@ -137,7 +137,7 @@ pub const Rect = struct {
         return self.b.y - self.a.y;
     }
 
-    pub fn contains(self: *const Rect, v: Vec2) bool {
+    pub fn contains(self: *const Rect, v: Vec) bool {
         return v.x >= self.a.x and v.x <= self.b.x and v.y >= self.a.y and v.y <= self.b.y;
     }
 

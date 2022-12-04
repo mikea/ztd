@@ -14,7 +14,7 @@ const Table = table.Table;
 const Resources = @import("resources.zig").Resources;
 
 const geom = @import("geom.zig");
-const Vec = geom.Vec2;
+const Vec = geom.Vec;
 const Rect = geom.Rect;
 
 const Health = struct {
