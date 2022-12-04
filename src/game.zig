@@ -17,10 +17,7 @@ const geom = @import("geom.zig");
 const Vec = geom.Vec;
 const Rect = geom.Rect;
 
-const Health = struct {
-    maxHealth: f32,
-    health: f32,
-};
+const model = @import("model.zig");
 
 const Tower = struct {
     upgradeCost: usize,
@@ -185,7 +182,6 @@ const UI = struct {
 };
 
 const AttackersTable = Table(Id, maxId, Attacker);
-const HealthsTable = Table(Id, maxId, Health);
 const MonstersTable = Table(Id, maxId, Monster);
 const TowersTable = Table(Id, maxId, Tower);
 const ProjectilesTable = Table(Id, maxId, Projectile);
@@ -197,8 +193,6 @@ pub const Game = struct {
     lastTicks: u32 = 0,
 
     attackers: AttackersTable,
-    healths: HealthsTable,
-
     projectiles: ProjectilesTable,
     towers: TowersTable,
 
@@ -214,7 +208,6 @@ pub const Game = struct {
             .engine = eng,
             .resources = resources,
             .attackers = try AttackersTable.init(allocator),
-            .healths = try HealthsTable.init(allocator),
             .towers = try TowersTable.init(allocator),
             .monsters = try MonstersTable.init(allocator),
             .projectiles = try ProjectilesTable.init(allocator),
@@ -224,7 +217,6 @@ pub const Game = struct {
     }
 
     pub fn deinit(self: *Game) void {
-        self.healths.deinit();
         self.monsters.deinit();
         self.towers.deinit();
         self.projectiles.deinit();
@@ -232,15 +224,11 @@ pub const Game = struct {
     }
 
     fn delete(self: *Game, id: Id) !void {
-        try self.engine.bounds.delete(id);
-        try self.engine.sprites.delete(id);
-        try self.engine.animations.delete(id);
-
-        try self.healths.delete(id);
         try self.attackers.delete(id);
         try self.monsters.delete(id);
         try self.towers.delete(id);
         try self.projectiles.delete(id);
+        try self.engine.delete(id);
     }
 
     pub fn addTower(self: *Game, pos: Vec) !void {
@@ -249,10 +237,10 @@ pub const Game = struct {
             .upgradeCost = 10,
         };
         try self.towers.set(id, tower);
-        try self.healths.set(id, .{ .maxHealth = 100, .health = 100 });
         try self.attackers.set(id, .{ .target = 0, .range = 100, .attackDelayMs = 500, .attack = .{ .projectile = .{ .damage = 50, .speed = 500 } } });
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
         try self.engine.sprites.set(id, self.resources.tower.sprite(0, 0, 0));
+        try self.engine.healths.set(id, .{ .maxHealth = 100, .health = 100 });
 
         self.towersUpdated = true;
     }
@@ -347,7 +335,7 @@ pub const Game = struct {
                 continue;
             }
 
-            if (self.healths.find(attacker.target)) |targetHealth| {
+            if (self.engine.healths.find(attacker.target)) |targetHealth| {
                 const target = try self.engine.bounds.get(attacker.target);
                 const d = pos.dist(target.center());
                 if (d > attacker.range) {
@@ -380,7 +368,7 @@ pub const Game = struct {
                 const id = entry.*.id;
                 const projectile = try self.engine.bounds.get(id);
 
-                if (self.healths.find(entry.*.value.target)) |*targetHealth| {
+                if (self.engine.healths.find(entry.*.value.target)) |*targetHealth| {
                     const target = (try self.engine.bounds.get(entry.*.value.target)).center();
                     const ds = entry.*.value.v * dt;
                     const dir = target.minus(projectile.center());
@@ -406,7 +394,7 @@ pub const Game = struct {
 
         {
             // remove 0 health
-            var it = self.healths.iterator();
+            var it = self.engine.healths.iterator();
             while (it.next()) |*entry| {
                 if (entry.*.value.health <= 0) {
                     try toDelete.set(entry.*.id, {});

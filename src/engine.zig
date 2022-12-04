@@ -1,6 +1,7 @@
 const std = @import("std");
 const table = @import("table.zig");
 const geom = @import("geom.zig");
+const model = @import("model.zig");
 
 const sdlZig = @import("sdl.zig");
 const sdl = sdlZig.sdl;
@@ -60,6 +61,7 @@ pub const Engine = struct {
     const TextsTable = table.Table(Id, maxId, Text);
     const SpritesTable = table.Table(Id, maxId, Sprite);
     const AnimationsTable = table.Table(Id, maxId, Animation);
+    const HealthsTable = table.Table(Id, maxId, model.Health);
 
     viewport: Viewport,
     renderer: *sdl.SDL_Renderer,
@@ -69,6 +71,7 @@ pub const Engine = struct {
     texts: TextsTable,
     sprites: SpritesTable,
     animations: AnimationsTable,
+    healths: HealthsTable,
 
     ids: IdManager = .{},
     running: bool = true,
@@ -88,6 +91,7 @@ pub const Engine = struct {
             .texts = try TextsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
             .animations = try AnimationsTable.init(allocator),
+            .healths = try HealthsTable.init(allocator),
             .viewport = Viewport.init(displaySize),
         };
     }
@@ -97,6 +101,15 @@ pub const Engine = struct {
         self.texts.deinit();
         self.sprites.deinit();
         self.animations.deinit();
+        self.healths.deinit();
+    }
+
+    pub fn delete(self: *Engine, id: Id) !void {
+        try self.bounds.delete(id);
+        try self.texts.delete(id);
+        try self.sprites.delete(id);
+        try self.animations.delete(id);
+        try self.healths.delete(id);
     }
 
     pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
