@@ -47,7 +47,7 @@ const Attacker = struct {
     },
     attackDelayMs: u64,
     lastAttack: u64 = 0,
-    target: Id, // pointer to Health record
+    target: Id = 0, // pointer to Health record
 };
 
 const AttackType = enum { direct, projectile };
@@ -91,11 +91,11 @@ const UI = struct {
                 sdl.sdl.SDLK_1 => {
                     if (self.mode != Mode.SELECT) return;
                     if (self.selectedTowerId) |towerId| {
-                        if (self.game.towers.find(towerId)) |*tower| {
-                            const upgradeCost = tower.*.value.upgradeCost;
+                        if (self.game.towers.find(towerId)) |tower| {
+                            const upgradeCost = tower.*.upgradeCost;
                             if (self.game.money >= upgradeCost) {
                                 self.game.money -= upgradeCost;
-                                tower.*.value.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, upgradeCost) * 1.5));
+                                tower.*.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, upgradeCost) * 1.5));
                                 const attacker = try self.game.attackers.get(towerId);
                                 attacker.*.attackDelayMs = @floatToInt(usize, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.2));
                             }
@@ -144,7 +144,7 @@ const UI = struct {
         const text = switch (self.mode) {
             Mode.BUILD => commonText,
             Mode.SELECT => if (selectedTower) |tower|
-                try std.fmt.allocPrintZ(frameAllocator, "{s}\n1 - upgrade $ {}", .{ commonText, tower.upgradeCost })
+                try std.fmt.allocPrintZ(frameAllocator, "{s}\n1 - upgrade rate $ {}", .{ commonText, tower.upgradeCost })
             else
                 commonText,
         };
@@ -160,16 +160,16 @@ const UI = struct {
         }
     }
 
-    fn updateSelection(self: *@This()) !?Tower {
+    fn updateSelection(self: *@This()) !?*Tower {
         if (self.mode == Mode.SELECT) {
             if (self.selectedTowerId) |towerId| {
-                if (self.game.towers.find(towerId)) |*tower| {
+                if (self.game.towers.find(towerId)) |tower| {
                     const pos = (try self.engine.bounds.get(towerId)).center();
                     const attacker = try self.game.attackers.get(towerId);
                     const range = attacker.range;
                     try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, range * 2, range * 2));
                     try self.engine.sprites.set(self.selId, try sdl.drawCircle(self.engine.renderer, range));
-                    return tower.*.value;
+                    return tower;
                 }
             }
         }
@@ -237,7 +237,7 @@ pub const Game = struct {
             .upgradeCost = 10,
         };
         try self.towers.set(id, tower);
-        try self.attackers.set(id, .{ .target = 0, .range = 100, .attackDelayMs = 500, .attack = .{ .projectile = .{ .damage = 50, .speed = 500 } } });
+        try self.attackers.set(id, .{ .target = 0, .range = 100, .attackDelayMs = 200, .attack = .{ .projectile = .{ .damage = 90, .speed = 400 } } });
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
         try self.engine.sprites.set(id, self.resources.tower.sprite(0, 0, 0));
         try self.engine.healths.set(id, .{ .maxHealth = 100, .health = 100 });
@@ -345,7 +345,7 @@ pub const Game = struct {
                 attacker.*.lastAttack = ticks;
                 switch (attacker.attack) {
                     .direct => {
-                        targetHealth.*.value.health -= attacker.attack.direct.damage;
+                        targetHealth.*.health -= attacker.attack.direct.damage;
                     },
                     .projectile => |*projectile| {
                         const id = self.engine.ids.nextId();
@@ -368,13 +368,15 @@ pub const Game = struct {
                 const id = entry.*.id;
                 const projectile = try self.engine.bounds.get(id);
 
-                if (self.engine.healths.find(entry.*.value.target)) |*targetHealth| {
+                if (self.engine.healths.find(entry.*.value.target)) |targetHealth| {
                     const target = (try self.engine.bounds.get(entry.*.value.target)).center();
                     const ds = entry.*.value.v * dt;
                     const dir = target.minus(projectile.center());
                     const n = dir.norm();
                     if (n < ds) {
-                        targetHealth.*.value.health -= entry.*.value.damage;
+                        // will self-destruct
+                        entry.*.value.target = 0;
+                        targetHealth.*.health -= entry.*.value.damage;
                     } else {
                         const dn = dir.scale(ds / n);
                         try self.engine.bounds.update(id, projectile.translate(dn));
@@ -398,8 +400,8 @@ pub const Game = struct {
             while (it.next()) |*entry| {
                 if (entry.*.value.health <= 0) {
                     try toDelete.set(entry.*.id, {});
-                    if (self.monsters.find(entry.*.id)) |*monster| {
-                        self.money += monster.*.value.price;
+                    if (self.monsters.find(entry.*.id)) |monster| {
+                        self.money += monster.*.price;
                     }
                 }
             }
@@ -417,7 +419,6 @@ pub const Game = struct {
 
         var toDeleteIt = toDelete.iterator();
         while (toDeleteIt.next()) |entry| {
-            // std.log.debug("deleting: {}", .{entry.id});
             try self.delete(entry.id);
         }
     }

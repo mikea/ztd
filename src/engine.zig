@@ -165,12 +165,23 @@ pub const Engine = struct {
 
         // draw sprites
         var it = self.sprites.iterator();
-        while (it.next()) |entry| {
-            const sprite = entry.value;
-            const rect = try self.bounds.get(entry.id);
+        while (it.next()) |*entry| {
+            const sprite = entry.*.value;
+            const rect = try self.bounds.get(entry.*.id);
             if (self.viewport.view.intersects(rect)) {
                 const destRect = self.viewport.toScreen(rect);
                 try checkInt(sdl.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.SDL_FLIP_NONE));
+
+                if (self.healths.find(entry.*.id)) |health| {
+                    if (health.*.health < health.*.maxHealth) {
+                        // display health underneath the main sprite
+                        const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
+                        const healthRect = Rect{.a = .{.x = rect.a.x, .y = rect.b.y}, .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1}, };
+                        const destHealthRect = self.viewport.toScreen(healthRect);
+                        try checkInt(sdl.SDL_SetRenderDrawColor(self.renderer, 0, 255, 0, 255));
+                        try checkInt(sdl.SDL_RenderFillRect(self.renderer, &destHealthRect));
+                    }
+                }
             }
         }
     }
@@ -202,8 +213,8 @@ pub const Engine = struct {
     }
 
     pub fn setText(self: *Engine, id: Id, text: [:0]const u8, pos: Vec, alignment: Alignment, color: sdl.SDL_Color, font: *sdl.TTF_Font) !void {
-        if (self.texts.find(id)) |entry| {
-            entry.value.destroy();
+        if (self.texts.find(id)) |t| {
+            t.destroy();
         }
 
         const surface = sdl.TTF_RenderText_Solid_Wrapped(font, @as([*:0]const u8, text), color, 0);
@@ -243,7 +254,10 @@ const Viewport = struct {
     }
 
     pub fn toScreen(self: *const Viewport, rect: Rect) sdl.SDL_Rect {
-        const a = rect.a.add(self.translation).scale(self.scale);
+        const a = Vec{
+            .x = (rect.a.x + self.translation.x)*self.scale,
+            .y = (rect.a.y + self.translation.y)*self.scale,
+        };
         const size = rect.size().scale(self.scale);
 
         return .{

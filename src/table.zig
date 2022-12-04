@@ -8,8 +8,8 @@ const RTree = @import("r_tree.zig").RTree;
 pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
     return struct {
         const Set = SparseSet(Id, maxId, T);
-        pub const Entry = Set.Entry;
-        pub const Iterator = Set.Iterator;
+        const Entry = Set.Entry;
+        const Iterator = Set.Iterator;
 
         sparse: Set,
 
@@ -29,8 +29,11 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
             return self.sparse.iterator();
         }
 
-        pub fn find(self: *@This(), id: Id) ?*Entry {
-            return self.sparse.find(id);
+        pub fn find(self: *@This(), id: Id) ?*T {
+            if (self.sparse.find(id)) |*entry| {
+                return &entry.*.value;
+            }
+            return null;
         }
 
         pub fn get(self: *@This(), id: Id) !*T {
