@@ -3,3 +3,4 @@ zig-out/
 .gdb_history
 perf.data
 perf.data.old
+ztd.tgz

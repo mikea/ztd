@@ -16,7 +16,7 @@ Keys:
 
 - PgUp/PgDn, Mouse Wheel - zoom
 - B - build mode
-- ESC - exit build mode, cler selection
+- ESC - exit build mode, clear selection
 - 1 - upgrade selected tower rate of fire
 - q - quit
 

@@ -107,8 +107,6 @@ const UI = struct {
             sdl.sdl.SDL_MOUSEBUTTONDOWN => {
                 switch (self.mode) {
                     Mode.BUILD => if (self.game.money >= 10) {
-                        self.mode = Mode.SELECT;
-                        self.selectedTowerId = null;
                         try self.game.addTower(self.engine.mousePos.grid(8, 8));
                         self.game.money -= 10;
                     },
