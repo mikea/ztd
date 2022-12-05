@@ -1,13 +1,13 @@
 const std = @import("std");
 
 pub const sdl = @cImport({
-    @cInclude("SDL2/SDL.h");
-    @cInclude("SDL2/SDL_image.h");
-    @cInclude("SDL2/SDL_ttf.h");
+    @cInclude("SDL.h");
+    @cInclude("SDL_image.h");
+    @cInclude("SDL_ttf.h");
 });
 
 const cairo = @cImport({
-    @cInclude("cairo/cairo.h");
+    @cInclude("cairo.h");
 });
 
 pub const Renderer = sdl.SDL_Renderer;

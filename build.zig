@@ -8,10 +8,30 @@ pub fn build(b: *std.build.Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
 
-    {
+    if (target.os_tag == std.Target.Os.Tag.windows) {
         exe.linkLibC();
 
-        exe.addIncludePath("/usr/include");
+        const sdl_path = "/home/mike/Packages/SDL2-2.26.1/";
+        exe.addIncludePath(sdl_path ++ "include");
+        // exe.linkSystemLibrary("SDL2");
+
+        const sdl_ttf_path = "/home/mike/Packages/SDL2_ttf-2.20.1/";
+        exe.addIncludePath(sdl_ttf_path ++ "include");
+        // exe.linkSystemLibrary("SDL2_ttf");
+
+        const sdl_image_path = "/home/mike/Packages/SDL2_image-2.6.2/";
+        exe.addIncludePath(sdl_image_path ++ "include");
+        // // exe.addLibraryPath(sdl_image_path ++ "lib/x64/");
+        // exe.linkSystemLibrary("SDL2_image");
+
+        const cairo_path = "/home/mike/Packages/cairo-windows-1.17.2/";
+        exe.addIncludePath(cairo_path ++ "include");
+    }
+    else {
+        exe.linkLibC();
+
+        exe.addIncludePath("/usr/include/SDL2/");
+        exe.addIncludePath("/usr/include/cairo/");
         exe.addIncludePath("/usr/include/x86_64-linux-gnu");
 
         // setup sdl2
