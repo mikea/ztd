@@ -27,6 +27,7 @@ Zig 0.11
 - `zig build`
 - `zig build run`
 - `zig build run -Drelease-fast=true`
+- `zig build -Drelease-fast=true -Dtarget=x86_64-windows`
 
 ## Code Organization
 

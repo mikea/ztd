@@ -7,39 +7,36 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutable("ztd", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    exe.linkLibC(); // for cimports
 
     if (target.os_tag == std.Target.Os.Tag.windows) {
-        exe.linkLibC();
-
         const sdl_path = "/home/mike/Packages/SDL2-2.26.1/";
         exe.addIncludePath(sdl_path ++ "include");
-        // exe.linkSystemLibrary("SDL2");
+        exe.addLibraryPath(sdl_path ++ "lib/x64/");
+        b.installBinFile(sdl_path ++ "lib/x64/SDL2.dll", "SDL2.dll");
+        exe.linkSystemLibraryName("SDL2");
 
         const sdl_ttf_path = "/home/mike/Packages/SDL2_ttf-2.20.1/";
         exe.addIncludePath(sdl_ttf_path ++ "include");
-        // exe.linkSystemLibrary("SDL2_ttf");
+        exe.addLibraryPath(sdl_ttf_path ++ "lib/x64/");
+        b.installBinFile(sdl_ttf_path ++ "lib/x64/SDL2_ttf.dll", "SDL2_ttf.dll");
+        exe.linkSystemLibraryName("SDL2_ttf");
 
         const sdl_image_path = "/home/mike/Packages/SDL2_image-2.6.2/";
         exe.addIncludePath(sdl_image_path ++ "include");
-        // // exe.addLibraryPath(sdl_image_path ++ "lib/x64/");
-        // exe.linkSystemLibrary("SDL2_image");
+        exe.addLibraryPath(sdl_image_path ++ "lib/x64/");
+        b.installBinFile(sdl_image_path ++ "lib/x64/SDL2_image.dll", "SDL2_image.dll");
+        exe.linkSystemLibraryName("SDL2_image");
 
         const cairo_path = "/home/mike/Packages/cairo-windows-1.17.2/";
         exe.addIncludePath(cairo_path ++ "include");
-    }
-    else {
-        exe.linkLibC();
-
-        exe.addIncludePath("/usr/include/SDL2/");
-        exe.addIncludePath("/usr/include/cairo/");
-        exe.addIncludePath("/usr/include/x86_64-linux-gnu");
-
-        // setup sdl2
+        exe.addLibraryPath(cairo_path ++ "lib/x64/");
+        b.installBinFile(cairo_path ++ "lib/x64/cairo.dll", "cairo.dll");
+        exe.linkSystemLibraryName("cairo");
+    } else {
         exe.linkSystemLibrary("sdl2");
         exe.linkSystemLibrary("sdl2_ttf");
         exe.linkSystemLibrary("sdl2_image");
-        
-        // cairo for drawing
         exe.linkSystemLibrary("cairo");
     }
 

@@ -74,6 +74,7 @@ pub fn main() !void {
 
     var displayMode: sdl.SDL_DisplayMode = undefined;
     try checkInt(sdl.SDL_GetCurrentDisplayMode(0, &displayMode));
+    std.debug.print("displayMode: {}\n", .{displayMode});
 
     const window = try checkNotNull(sdl.SDL_Window, sdl.SDL_CreateWindow("ZTD", sdl.SDL_WINDOWPOS_UNDEFINED, sdl.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.SDL_WINDOW_SHOWN));
     defer sdl.SDL_DestroyWindow(window);
