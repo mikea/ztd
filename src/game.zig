@@ -9,7 +9,7 @@ const SparseSet = @import("sparse_set.zig").SparseSet;
 const table = @import("table.zig");
 const Table = table.Table;
 
-const Resources = @import("resources.zig").Resources;
+const resources = @import("resources.zig");
 
 const geom = @import("geom.zig");
 const Vec = geom.Vec;
@@ -34,7 +34,7 @@ const Mode = enum {
 
 const UI = struct {
     engine: *engine.Engine,
-    resources: *Resources,
+    resources: *resources.Resources,
     game: *Game,
 
     mode: Mode = Mode.SELECT,
@@ -126,7 +126,8 @@ const UI = struct {
         // update build shadow
         if (self.mode == Mode.BUILD) {
             try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
-            try self.engine.sprites.set(self.shadowId, self.resources.tower.sprite(0, 0, 0));
+            // todo: store current template somewhere
+            try self.engine.sprites.set(self.shadowId, (try self.resources.getSheet(self.engine.renderer, resources.SpriteSheets.WOOD_TOWER)).sprite(0, 0, 0));
         } else {
             try self.engine.bounds.delete(self.shadowId);
             try self.engine.sprites.delete(self.shadowId);
@@ -161,7 +162,7 @@ const ProjectilesTable = Table(Id, maxId, Projectile);
 
 pub const Game = struct {
     engine: *engine.Engine,
-    resources: *Resources,
+    resources: *resources.Resources,
 
     lastTicks: u32 = 0,
 
@@ -175,11 +176,11 @@ pub const Game = struct {
     towersUpdated: bool = false,
     money: usize = 0,
 
-    pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, resources: *Resources) !*Game {
+    pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, res: *resources.Resources) !*Game {
         var game = try allocator.create(Game);
         game.* = .{
             .engine = eng,
-            .resources = resources,
+            .resources = res,
             .attackers = try AttackersTable.init(allocator),
             .towers = try TowersTable.init(allocator),
             .monsters = try MonstersTable.init(allocator),
@@ -213,7 +214,7 @@ pub const Game = struct {
         try self.engine.animations.set(id, .{
             .animationDelay = d.animations.walk.delay,
             .i = id % d.animations.walk.sprites.len,
-            .sheet = self.resources.getSheet(d.animations.walk.sheet),
+            .sheet = try self.resources.getSheet(self.engine.renderer, d.animations.walk.sheet),
             .sprites = d.animations.walk.sprites,
         });
     }
@@ -224,7 +225,7 @@ pub const Game = struct {
         try self.attackers.set(id, d.attack);
         try self.engine.healths.set(id, d.health);
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
-        try self.engine.sprites.set(id, self.resources.getSheet(d.sheet).sprite(d.sprite.x, d.sprite.y, 0));
+        try self.engine.sprites.set(id, (try self.resources.getSheet(self.engine.renderer, d.sheet)).sprite(d.sprite.x, d.sprite.y, 0));
         self.towersUpdated = true;
     }
 
@@ -334,7 +335,7 @@ pub const Game = struct {
                         const id = self.engine.ids.nextId();
                         try self.projectiles.set(id, .{ .target = attacker.target, .v = projectile.speed, .damage = projectile.damage });
                         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-                        try self.engine.sprites.set(id, self.resources.fireballProjectile.sprite(0, 0, 90));
+                        try self.engine.sprites.set(id, (try self.resources.getSheet(self.engine.renderer, resources.SpriteSheets.FIREBALL_PROJECTILE)).sprite(0, 0, 90));
                     },
                 }
             }

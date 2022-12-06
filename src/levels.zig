@@ -44,13 +44,15 @@ pub fn initLevel1(game: *Game, allocator: std.mem.Allocator) !void {
         try game.addMonster(last, &data.RedMonster);
 
         var curDist: f32 = dist;
+        var m: usize = 0;
         while (i < points.len) {
             const p = points[i];
 
             while (curDist < p.dist(last)) {
                 const delta = last.dir(p).scale(curDist);
                 const next = last.add(delta);
-                try game.addMonster(next, &data.RedMonster);
+                try game.addMonster(next, if (m % 10 != 9) &data.Orc else &data.RedMonster);
+                m += 1;
 
                 last = next;
                 curDist = dist;

@@ -43,7 +43,7 @@ pub const SpriteSheet = struct {
         return .{ .texture = texture, .w = w, .h = h };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: @This()) void {
         sdl.SDL_DestroyTexture(self.texture);
     }
 

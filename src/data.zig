@@ -29,12 +29,28 @@ pub const AnimationData = struct {
 };
 
 pub const RedMonster = MonsterData{
+    .size = .{ .x = 10, .y = 10 },
+    .monster = .{ .speed = 8, .price = 20 },
+    .attack = .{ .target = 0, .range = 10, .attack = .{ .direct = .{ .damage = 5 } }, .attackDelayMs = 1000 },
+    .health = .{ .maxHealth = 1000, .health = 1000 },
+    .animations = .{
+        .walk = .{ .delay = 250, .sheet = resources.SpriteSheets.RED_DEMON, .sprites = &[_]resources.SpriteSheet.Coords{
+            .{ .x = 2, .y = 0 },
+            .{ .x = 3, .y = 0 },
+            .{ .x = 4, .y = 0 },
+            .{ .x = 3, .y = 0 },
+        } },
+    },
+};
+
+
+pub const Orc = MonsterData{
     .size = .{ .x = 8, .y = 8 },
     .monster = .{ .speed = 10, .price = 1 },
     .attack = .{ .target = 0, .range = 10, .attack = .{ .direct = .{ .damage = 1 } }, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 100, .health = 100 },
     .animations = .{
-        .walk = .{ .delay = 200, .sheet = resources.SpriteSheets.RED_DEMON, .sprites = &[_]resources.SpriteSheet.Coords{
+        .walk = .{ .delay = 150, .sheet = resources.SpriteSheets.ORC, .sprites = &[_]resources.SpriteSheet.Coords{
             .{ .x = 2, .y = 0 },
             .{ .x = 3, .y = 0 },
             .{ .x = 4, .y = 0 },

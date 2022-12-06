@@ -89,7 +89,7 @@ pub fn main() !void {
     var renderer = try checkNotNull(sdl.SDL_Renderer, sdl.SDL_CreateRenderer(window, -1, sdl.SDL_RENDERER_ACCELERATED));
     defer sdl.SDL_DestroyRenderer(renderer);
 
-    var resources = try Resources.init(renderer);
+    var resources = try Resources.init();
     defer resources.deinit();
 
     var eng = try engine.Engine.init(allocator, renderer);
