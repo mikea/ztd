@@ -7,9 +7,10 @@ const Vec = geom.Vec;
 const Game = @import("game.zig").Game;
 
 const sdl = @import("sdl.zig");
+const data = @import("data.zig");
 
-pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
-    try self.addTower(.{ .x = 0, .y = 0 });
+pub fn initLevel1(game: *Game, allocator: std.mem.Allocator) !void {
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.MagicTower);
 
     const points = try allocator.alloc(Vec, 20000);
     defer allocator.free(points);
@@ -40,7 +41,7 @@ pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
         var i: usize = 1;
 
         var last = points[0];
-        try addMonster(self, last);
+        try game.addMonster(last, &data.RedMonster);
 
         var curDist: f32 = dist;
         while (i < points.len) {
@@ -49,7 +50,7 @@ pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
             while (curDist < p.dist(last)) {
                 const delta = last.dir(p).scale(curDist);
                 const next = last.add(delta);
-                try addMonster(self, next);
+                try game.addMonster(next, &data.RedMonster);
 
                 last = next;
                 curDist = dist;
@@ -62,21 +63,7 @@ pub fn initLevel1(self: *Game, allocator: std.mem.Allocator) !void {
     }
 }
 
-fn addMonster(self: *Game, pos: Vec) !void {
-    const id = self.engine.ids.nextId();
-    try self.monsters.set(id, .{ .speed = 10, .price = 1 });
-    try self.attackers.set(id, .{ .target = 0, .range = 10, .attack = .{ .direct = .{ .damage = 1 } }, .attackDelayMs = 1000 });
-    try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-    try self.engine.animations.set(id, .{ .animationDelay = 200, .i = id % 4, .sheet = &self.resources.redDemon, .sprites = &[_]sdl.SpriteSheet.Coords{
-        .{ .x = 2, .y = 0 },
-        .{ .x = 3, .y = 0 },
-        .{ .x = 4, .y = 0 },
-        .{ .x = 3, .y = 0 },
-    } });
-    try self.engine.healths.set(id, .{ .maxHealth = 100, .health = 100 });
-}
-
-pub fn initStress1(self: *Game) !void {
+pub fn initStress1(game: *Game) !void {
     {
         // init monsters
         const grid = 200;
@@ -89,7 +76,7 @@ pub fn initStress1(self: *Game) !void {
                 if (j < 5 and j > -5) {
                     continue;
                 }
-                try addMonster(self, .{.x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step});
+                try game.addMonster(.{.x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step}, &data.RedMonster);
             }
         }
     }
@@ -98,16 +85,10 @@ pub fn initStress1(self: *Game) !void {
         // init towers
         var i: i32 = -5000;
         while (i <= 5000) {
-            try self.addTower(.{ .x = @intToFloat(f32, i), .y = 0 });
+            try game.addTower(.{ .x = @intToFloat(f32, i), .y = 0 }, &data.MagicTower);
             i += 200;
         }
     }
 
-    {
-        const id = self.engine.ids.nextId();
-
-        // add keep
-        try self.engine.bounds.set(id, Rect.initCentered(0, 0, 16, 16));
-        try self.engine.sprites.set(id, self.resources.woodKeep.sprite(0, 0, 0));
-    }
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.Keep);
 }

@@ -52,7 +52,7 @@ pub const SpriteSheet = struct {
         y: u16,
     };
 
-    pub fn sprite(self: *@This(), x: u16, y: u16, angle: f64) Sprite {
+    pub fn sprite(self: *const @This(), x: u16, y: u16, angle: f64) Sprite {
         return .{ .texture = self.texture, .src = sdl.SDL_Rect{
             .x = x * self.w,
             .y = y * self.h,

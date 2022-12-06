@@ -5,7 +5,8 @@ const engine = @import("engine.zig");
 const Game = @import("game.zig").Game;
 const levels = @import("levels.zig");
 
-const Id = engine.Id;
+const model = @import("model.zig");
+const Id = model.Id;
 
 const contentDir = buildOptions.content_dir;
 const SparseSet = @import("sparse_set.zig").SparseSet;

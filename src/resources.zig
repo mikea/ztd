@@ -1,9 +1,15 @@
-
 const sdlZig = @import("sdl.zig");
 const sdl = sdlZig.sdl;
 const checkNotNull = sdlZig.checkNotNull;
 const checkInt = sdlZig.checkInt;
-const SpriteSheet = sdlZig.SpriteSheet;
+
+pub const SpriteSheet = sdlZig.SpriteSheet;
+pub const SpriteSheets = enum {
+    RED_DEMON,
+    WOOD_KEEP,
+    WOOD_TOWER,
+    FIREBALL_PROJECTILE,
+};
 
 pub const Resources = struct {
     redDemon: SpriteSheet,
@@ -28,5 +34,14 @@ pub const Resources = struct {
         self.fireballProjectile.deinit();
         self.woodKeep.deinit();
         sdl.TTF_CloseFont(self.rubik20);
+    }
+
+    pub fn getSheet(self: *const Resources, sheet: SpriteSheets) *const SpriteSheet {
+        return switch (sheet) {
+            SpriteSheets.RED_DEMON => &self.redDemon,
+            SpriteSheets.WOOD_KEEP => &self.woodKeep,
+            SpriteSheets.WOOD_TOWER => &self.tower,
+            SpriteSheets.FIREBALL_PROJECTILE => &self.fireballProjectile,
+        };
     }
 };

@@ -10,9 +10,6 @@ const Rect = geom.Rect;
 const inf = std.math.inf_f32;
 const assert = std.debug.assert;
 
-var prng = std.rand.DefaultPrng.init(0);
-const random = prng.random();
-
 pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, comptime middleSize: usize) type {
     const Entry = struct {
         id: Id,
@@ -417,18 +414,6 @@ fn linearPickSeeds(comptime T: type, entries: []T) [2]usize {
     } else {
         std.debug.assert(lowestHighYIdx != highestLowYIdx);
         return [_]usize{ lowestHighYIdx, highestLowYIdx };
-    }
-}
-
-fn shuffleArray(comptime T: type, arr: []T) void {
-    var i = arr.len - 1;
-    while (i > 0) {
-        const j = random.int(usize) % (i + 1);
-        var x = arr[i];
-        arr[i] = arr[j];
-        arr[j] = x;
-
-        i -= 1;
     }
 }
 

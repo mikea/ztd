@@ -1,7 +1,10 @@
 const std = @import("std");
 const table = @import("table.zig");
 const geom = @import("geom.zig");
+
 const model = @import("model.zig");
+const Id = model.Id;
+const maxId = model.maxId;
 
 const sdlZig = @import("sdl.zig");
 const sdl = sdlZig.sdl;
@@ -12,8 +15,6 @@ const Sprite = sdlZig.Sprite;
 const Vec = geom.Vec;
 const Rect = geom.Rect;
 
-pub const Id = u32;
-pub const maxId: usize = 1 << 18;
 
 pub const IdManager = struct {
     i: Id = 0,
@@ -49,7 +50,7 @@ pub const Text = struct {
 };
 
 pub const Animation = struct {
-    sheet: *sdlZig.SpriteSheet,
+    sheet: *const sdlZig.SpriteSheet,
     sprites: []const sdlZig.SpriteSheet.Coords,
     animationDelay: u32,
     i: usize = 0,
