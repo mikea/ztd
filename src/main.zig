@@ -11,12 +11,11 @@ const Id = model.Id;
 const contentDir = buildOptions.content_dir;
 const SparseSet = @import("sparse_set.zig").SparseSet;
 
-const sdlZig = @import("sdl.zig");
-const sdl = sdlZig.sdl;
-const checkNotNull = sdlZig.checkNotNull;
-const checkInt = sdlZig.checkInt;
-const Sprite = sdlZig.Sprite;
-const SpriteSheet = sdlZig.SpriteSheet;
+const sdl = @import("sdl.zig");
+const checkNotNull = sdl.checkNotNull;
+const checkInt = sdl.checkInt;
+const Sprite = sdl.Sprite;
+const SpriteSheet = sdl.SpriteSheet;
 
 const Resources = @import("resources.zig").Resources;
 
@@ -67,29 +66,29 @@ pub fn main() !void {
 
     std.debug.print("Arguments: {s}\n", .{args});
 
-    try checkInt(sdl.SDL_Init(sdl.SDL_INIT_VIDEO));
+    try checkInt(sdl.c.SDL_Init(sdl.c.SDL_INIT_VIDEO));
     defer {
-        sdl.SDL_Quit();
+        sdl.c.SDL_Quit();
         std.log.info("application done, exiting", .{});
     }
 
-    var displayMode: sdl.SDL_DisplayMode = undefined;
-    try checkInt(sdl.SDL_GetCurrentDisplayMode(0, &displayMode));
+    var displayMode: sdl.c.SDL_DisplayMode = undefined;
+    try checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
     std.debug.print("displayMode: {}\n", .{displayMode});
 
-    const window = try checkNotNull(sdl.SDL_Window, sdl.SDL_CreateWindow("ZTD", sdl.SDL_WINDOWPOS_UNDEFINED, sdl.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.SDL_WINDOW_SHOWN));
-    defer sdl.SDL_DestroyWindow(window);
+    const window = try checkNotNull(sdl.c.SDL_Window, sdl.c.SDL_CreateWindow("ZTD", sdl.c.SDL_WINDOWPOS_UNDEFINED, sdl.c.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.c.SDL_WINDOW_SHOWN));
+    defer sdl.c.SDL_DestroyWindow(window);
 
-    try checkInt(sdl.SDL_SetWindowFullscreen(window, sdl.SDL_WINDOW_FULLSCREEN));
+    try checkInt(sdl.c.SDL_SetWindowFullscreen(window, sdl.c.SDL_WINDOW_FULLSCREEN));
 
-    try checkInt(sdl.TTF_Init());
-    defer sdl.TTF_Quit();
+    try checkInt(sdl.c.TTF_Init());
+    defer sdl.c.TTF_Quit();
 
-    //  | sdl.SDL_RENDERER_PRESENTVSYNC
-    var renderer = try checkNotNull(sdl.SDL_Renderer, sdl.SDL_CreateRenderer(window, -1, sdl.SDL_RENDERER_ACCELERATED));
-    defer sdl.SDL_DestroyRenderer(renderer);
+    //  | sdl.c.SDL_RENDERER_PRESENTVSYNC
+    var renderer = try checkNotNull(sdl.c.SDL_Renderer, sdl.c.SDL_CreateRenderer(window, -1, sdl.c.SDL_RENDERER_ACCELERATED));
+    defer sdl.c.SDL_DestroyRenderer(renderer);
 
-    var resources = try Resources.init();
+    var resources = try Resources.init(renderer);
     defer resources.deinit();
 
     var eng = try engine.Engine.init(allocator, renderer);
@@ -128,7 +127,7 @@ pub fn main() !void {
         defer arena.deinit();
         const frameAllocator = arena.allocator();
 
-        const ticks = sdl.SDL_GetTicks();
+        const ticks = sdl.c.SDL_GetTicks();
         {
             var timer = try std.time.Timer.start();
             defer {
@@ -148,6 +147,6 @@ pub fn main() !void {
             try eng.render();
             try game.render();
         }
-        sdl.SDL_RenderPresent(renderer);
+        sdl.c.SDL_RenderPresent(renderer);
     }
 }

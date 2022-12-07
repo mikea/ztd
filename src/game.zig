@@ -1,15 +1,14 @@
 const std = @import("std");
-
 const engine = @import("engine.zig");
-
 const sdl = @import("sdl.zig");
+const resources = @import("resources.zig");
+const data = @import("data.zig");
+const ui = @import("ui.zig");
 
 const SparseSet = @import("sparse_set.zig").SparseSet;
 
 const table = @import("table.zig");
 const Table = table.Table;
-
-const resources = @import("resources.zig");
 
 const geom = @import("geom.zig");
 const Vec = geom.Vec;
@@ -19,7 +18,6 @@ const model = @import("model.zig");
 const Id = model.Id;
 const maxId = model.maxId;
 
-const data = @import("data.zig");
 
 const Projectile = struct {
     v: f32,
@@ -27,137 +25,9 @@ const Projectile = struct {
     target: Id,
 };
 
-const Mode = enum {
-    SELECT,
-    BUILD,
-};
-
-const UI = struct {
-    engine: *engine.Engine,
-    resources: *resources.Resources,
-    game: *Game,
-
-    mode: Mode = Mode.SELECT,
-    textId: Id,
-    shadowId: Id,
-    selId: Id,
-
-    selectedTowerId: ?Id = null,
-
-    pub fn init(game: *Game) !@This() {
-        return .{
-            .game = game,
-            .engine = game.engine,
-            .resources = game.resources,
-            .textId = game.engine.ids.nextId(),
-            .shadowId = game.engine.ids.nextId(),
-            .selId = game.engine.ids.nextId(),
-        };
-    }
-
-    pub fn event(self: *@This(), e: *const sdl.Event) !void {
-        switch (e.type) {
-            sdl.sdl.SDL_KEYDOWN => switch (e.key.keysym.sym) {
-                sdl.sdl.SDLK_b => self.mode = Mode.BUILD,
-                sdl.sdl.SDLK_ESCAPE => {
-                    self.mode = Mode.SELECT;
-                    self.selectedTowerId = null;
-                },
-                sdl.sdl.SDLK_1 => {
-                    if (self.mode != Mode.SELECT) return;
-                    if (self.selectedTowerId) |towerId| {
-                        if (self.game.towers.find(towerId)) |tower| {
-                            const upgradeCost = tower.*.upgradeCost;
-                            if (self.game.money >= upgradeCost) {
-                                self.game.money -= upgradeCost;
-                                tower.*.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, upgradeCost) * 1.5));
-                                const attacker = try self.game.attackers.get(towerId);
-                                attacker.*.attackDelayMs = @floatToInt(usize, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.2));
-                            }
-                        }
-                    }
-                },
-                else => {},
-            },
-            sdl.sdl.SDL_MOUSEBUTTONDOWN => {
-                switch (self.mode) {
-                    Mode.BUILD => if (self.game.money >= data.MagicTower.tower.upgradeCost) {
-                        try self.game.addTower(self.engine.mousePos.grid(8, 8), &data.MagicTower);
-                        self.game.money -= 10;
-                    },
-                    Mode.SELECT => {
-                        var towerFinder: struct {
-                            towers: *TowersTable,
-                            towerId: ?Id = null,
-
-                            pub fn callback(s: *@This(), id: Id, _: Rect) error{OutOfMemory}!void {
-                                if (s.towers.find(id) != null) {
-                                    s.towerId = id;
-                                }
-                            }
-                        } = .{
-                            .towers = &self.game.towers,
-                        };
-
-                        try self.engine.bounds.findPoint(self.engine.mousePos, @TypeOf(towerFinder), &towerFinder, @TypeOf(towerFinder).callback);
-                        self.selectedTowerId = towerFinder.towerId;
-                    },
-                }
-            },
-            else => {},
-        }
-    }
-
-    fn update(self: *@This(), frameAllocator: std.mem.Allocator) !void {
-        const selectedTower = try self.updateSelection();
-
-        // update ui text
-        const commonText = try std.fmt.allocPrintZ(frameAllocator, "mode: {}\n$ {}", .{ self.mode, self.game.money });
-
-        const text = switch (self.mode) {
-            Mode.BUILD => commonText,
-            Mode.SELECT => if (selectedTower) |tower|
-                try std.fmt.allocPrintZ(frameAllocator, "{s}\n1 - upgrade rate $ {}", .{ commonText, tower.upgradeCost })
-            else
-                commonText,
-        };
-        try self.engine.setText(self.textId, text, .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-
-        // update build shadow
-        if (self.mode == Mode.BUILD) {
-            try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
-            // todo: store current template somewhere
-            try self.engine.sprites.set(self.shadowId, (try self.resources.getSheet(self.engine.renderer, resources.SpriteSheets.WOOD_TOWER)).sprite(0, 0, 0));
-        } else {
-            try self.engine.bounds.delete(self.shadowId);
-            try self.engine.sprites.delete(self.shadowId);
-        }
-    }
-
-    fn updateSelection(self: *@This()) !?*model.Tower {
-        if (self.mode == Mode.SELECT) {
-            if (self.selectedTowerId) |towerId| {
-                if (self.game.towers.find(towerId)) |tower| {
-                    const pos = (try self.engine.bounds.get(towerId)).center();
-                    const attacker = try self.game.attackers.get(towerId);
-                    const range = attacker.range;
-                    try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, range * 2, range * 2));
-                    try self.engine.sprites.set(self.selId, try sdl.drawCircle(self.engine.renderer, range));
-                    return tower;
-                }
-            }
-        }
-
-        self.selectedTowerId = null;
-        try self.engine.bounds.delete(self.selId);
-        try self.engine.sprites.delete(self.selId);
-        return null;
-    }
-};
-
 const AttackersTable = Table(Id, maxId, model.Attacker);
 const MonstersTable = Table(Id, maxId, model.Monster);
-const TowersTable = Table(Id, maxId, model.Tower);
+pub const TowersTable = Table(Id, maxId, model.Tower);
 const ProjectilesTable = Table(Id, maxId, Projectile);
 
 pub const Game = struct {
@@ -172,9 +42,10 @@ pub const Game = struct {
 
     monsters: MonstersTable,
 
-    ui: UI,
+    ui: ui.UI = undefined,
     towersUpdated: bool = false,
     money: usize = 0,
+    towerPrice: usize = 10,
 
     pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, res: *resources.Resources) !*Game {
         var game = try allocator.create(Game);
@@ -185,8 +56,8 @@ pub const Game = struct {
             .towers = try TowersTable.init(allocator),
             .monsters = try MonstersTable.init(allocator),
             .projectiles = try ProjectilesTable.init(allocator),
-            .ui = try UI.init(game),
         };
+        game.ui = try ui.UI.init(game);
         return game;
     }
 
@@ -214,7 +85,7 @@ pub const Game = struct {
         try self.engine.animations.set(id, .{
             .animationDelay = d.animations.walk.delay,
             .i = id % d.animations.walk.sprites.len,
-            .sheet = try self.resources.getSheet(self.engine.renderer, d.animations.walk.sheet),
+            .sheet = self.resources.getSheet(d.animations.walk.sheet),
             .sprites = d.animations.walk.sprites,
         });
     }
@@ -225,7 +96,7 @@ pub const Game = struct {
         try self.attackers.set(id, d.attack);
         try self.engine.healths.set(id, d.health);
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
-        try self.engine.sprites.set(id, (try self.resources.getSheet(self.engine.renderer, d.sheet)).sprite(d.sprite.x, d.sprite.y, 0));
+        try self.engine.sprites.set(id, (self.resources.getSheet(d.sheet)).sprite(d.sprite.x, d.sprite.y, 0));
         self.towersUpdated = true;
     }
 
@@ -295,11 +166,11 @@ pub const Game = struct {
             }
 
             const targetLoc = (try self.engine.bounds.get(attacker.*.target)).center();
-            const d = Vec.minus(targetLoc, loc);
-            const range = d.norm();
+            const dir = Vec.minus(targetLoc, loc);
+            const range = dir.norm();
             if (range > attacker.*.range) {
-                const ds = std.math.min(attacker.*.range, entry.*.value.speed * dt);
-                const dn = d.scale(ds / range);
+                const ds = std.math.min(range - attacker.*.range, entry.*.value.speed * dt);
+                const dn = dir.scale(ds / range);
                 try self.engine.bounds.update(entry.*.id, bound.translate(dn));
             }
         }
@@ -335,7 +206,7 @@ pub const Game = struct {
                         const id = self.engine.ids.nextId();
                         try self.projectiles.set(id, .{ .target = attacker.target, .v = projectile.speed, .damage = projectile.damage });
                         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-                        try self.engine.sprites.set(id, (try self.resources.getSheet(self.engine.renderer, resources.SpriteSheets.FIREBALL_PROJECTILE)).sprite(0, 0, 90));
+                        try self.engine.sprites.set(id, (self.resources.getSheet(projectile.sheet)).sprite(0, 0, 90));
                     },
                 }
             }
@@ -426,7 +297,7 @@ pub const Game = struct {
         }
 
         if (self.towers.size() == 0) {
-            std.debug.print("YOU LOST!!!!\n", .{});
+            std.debug.print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
             std.c.exit(0);
         }
 

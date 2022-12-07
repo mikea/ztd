@@ -6,11 +6,10 @@ const model = @import("model.zig");
 const Id = model.Id;
 const maxId = model.maxId;
 
-const sdlZig = @import("sdl.zig");
-const sdl = sdlZig.sdl;
-const checkNotNull = sdlZig.checkNotNull;
-const checkInt = sdlZig.checkInt;
-const Sprite = sdlZig.Sprite;
+const sdl = @import("sdl.zig");
+const checkNotNull = sdl.checkNotNull;
+const checkInt = sdl.checkInt;
+const Sprite = sdl.Sprite;
 
 const Vec = geom.Vec;
 const Rect = geom.Rect;
@@ -39,33 +38,25 @@ pub const Alignment = enum {
 pub const Text = struct {
     pos: Vec,
     alignment: Alignment,
-    surface: *sdl.SDL_Surface,
-    texture: ?*sdl.SDL_Texture,
+    surface: *sdl.c.SDL_Surface,
+    texture: ?*sdl.c.SDL_Texture,
 
     // todo: call on table cleanup
     fn destroy(self: *Text) void {
-        sdl.SDL_DestroyTexture(self.texture);
-        sdl.SDL_FreeSurface(self.surface);
+        sdl.c.SDL_DestroyTexture(self.texture);
+        sdl.c.SDL_FreeSurface(self.surface);
     }
-};
-
-pub const Animation = struct {
-    sheet: *const sdlZig.SpriteSheet,
-    sprites: []const sdlZig.SpriteSheet.Coords,
-    animationDelay: u32,
-    i: usize = 0,
-    lastFrame: u64 = 0,
 };
 
 pub const Engine = struct {
     const BoundsTable = table.RTable(Id, maxId);
     const TextsTable = table.Table(Id, maxId, Text);
     const SpritesTable = table.Table(Id, maxId, Sprite);
-    const AnimationsTable = table.Table(Id, maxId, Animation);
+    const AnimationsTable = table.Table(Id, maxId, model.Animation);
     const HealthsTable = table.Table(Id, maxId, model.Health);
 
     viewport: Viewport,
-    renderer: *sdl.SDL_Renderer,
+    renderer: *sdl.Renderer,
 
     // tables
     bounds: BoundsTable,
@@ -78,11 +69,11 @@ pub const Engine = struct {
     running: bool = true,
     mousePos: Vec = .{ .x = 0, .y = 0 },
 
-    pub fn init(allocator: std.mem.Allocator, renderer: *sdl.SDL_Renderer) !Engine {
-        var displayMode: sdl.SDL_DisplayMode = undefined;
-        try checkInt(sdl.SDL_GetCurrentDisplayMode(0, &displayMode));
+    pub fn init(allocator: std.mem.Allocator, renderer: *sdl.Renderer) !Engine {
+        var displayMode: sdl.c.SDL_DisplayMode = undefined;
+        try checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
 
-        try checkInt(sdl.SDL_SetRenderDrawBlendMode(renderer, sdl.SDL_BLENDMODE_BLEND));
+        try checkInt(sdl.c.SDL_SetRenderDrawBlendMode(renderer, sdl.c.SDL_BLENDMODE_BLEND));
 
         const displaySize = Vec{ .x = @intToFloat(f32, displayMode.w), .y = @intToFloat(f32, displayMode.h) };
 
@@ -113,16 +104,16 @@ pub const Engine = struct {
         try self.healths.delete(id);
     }
 
-    pub fn nextEvent(self: *Engine) ?sdl.SDL_Event {
-        var event: sdl.SDL_Event = undefined;
-        while (sdl.SDL_PollEvent(&event) != 0) {
+    pub fn nextEvent(self: *Engine) ?sdl.c.SDL_Event {
+        var event: sdl.c.SDL_Event = undefined;
+        while (sdl.c.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
-                sdl.SDL_QUIT => self.running = false,
-                sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
-                    sdl.SDLK_q => self.running = false,
+                sdl.c.SDL_QUIT => self.running = false,
+                sdl.c.SDL_KEYDOWN => switch (event.key.keysym.sym) {
+                    sdl.c.SDLK_q => self.running = false,
                     else => {},
                 },
-                sdl.SDL_MOUSEMOTION => {
+                sdl.c.SDL_MOUSEMOTION => {
                     const screenPos = Vec{ .x = @intToFloat(f32, event.motion.x), .y = @intToFloat(f32, event.motion.y) };
                     self.mousePos = self.viewport.screenToGame(screenPos);
                 },
@@ -161,8 +152,8 @@ pub const Engine = struct {
     }
 
     fn renderSprites(self: *Engine) !void {
-        try checkInt(sdl.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
-        try checkInt(sdl.SDL_RenderClear(self.renderer));
+        try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
+        try checkInt(sdl.c.SDL_RenderClear(self.renderer));
 
         // draw sprites
         var it = self.sprites.iterator();
@@ -171,7 +162,7 @@ pub const Engine = struct {
             const rect = try self.bounds.get(entry.*.id);
             if (self.viewport.view.intersects(rect)) {
                 const destRect = self.viewport.toScreen(rect);
-                try checkInt(sdl.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.SDL_FLIP_NONE));
+                try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.c.SDL_FLIP_NONE));
 
                 if (self.healths.find(entry.*.id)) |health| {
                     if (health.*.health < health.*.maxHealth) {
@@ -179,8 +170,8 @@ pub const Engine = struct {
                         const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
                         const healthRect = Rect{.a = .{.x = rect.a.x, .y = rect.b.y}, .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1}, };
                         const destHealthRect = self.viewport.toScreen(healthRect);
-                        try checkInt(sdl.SDL_SetRenderDrawColor(self.renderer, 0, 255, 0, 255));
-                        try checkInt(sdl.SDL_RenderFillRect(self.renderer, &destHealthRect));
+                        try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0, 255, 0, 255));
+                        try checkInt(sdl.c.SDL_RenderFillRect(self.renderer, &destHealthRect));
                     }
                 }
             }
@@ -193,32 +184,32 @@ pub const Engine = struct {
             var text = &entry.*.value;
 
             if (text.texture == null) {
-                text.texture = try checkNotNull(sdl.SDL_Texture, sdl.SDL_CreateTextureFromSurface(self.renderer, text.surface));
+                text.texture = try checkNotNull(sdl.c.SDL_Texture, sdl.c.SDL_CreateTextureFromSurface(self.renderer, text.surface));
             }
 
-            const srcRect: sdl.SDL_Rect = .{
+            const srcRect: sdl.c.SDL_Rect = .{
                 .x = 0,
                 .y = 0,
                 .w = text.surface.*.w,
                 .h = text.surface.*.h,
             };
-            const dstRect: sdl.SDL_Rect = .{
+            const dstRect: sdl.c.SDL_Rect = .{
                 .x = @floatToInt(i32, text.pos.x),
                 .y = @floatToInt(i32, text.pos.y),
                 .w = text.surface.*.w,
                 .h = text.surface.*.h,
             };
 
-            try checkInt(sdl.SDL_RenderCopy(self.renderer, text.texture, &srcRect, &dstRect));
+            try checkInt(sdl.c.SDL_RenderCopy(self.renderer, text.texture, &srcRect, &dstRect));
         }
     }
 
-    pub fn setText(self: *Engine, id: Id, text: [:0]const u8, pos: Vec, alignment: Alignment, color: sdl.SDL_Color, font: *sdl.TTF_Font) !void {
+    pub fn setText(self: *Engine, id: Id, text: [:0]const u8, pos: Vec, alignment: Alignment, color: sdl.c.SDL_Color, font: *sdl.c.TTF_Font) !void {
         if (self.texts.find(id)) |t| {
             t.destroy();
         }
 
-        const surface = sdl.TTF_RenderText_Solid_Wrapped(font, @as([*:0]const u8, text), color, 0);
+        const surface = sdl.c.TTF_RenderText_Solid_Wrapped(font, @as([*:0]const u8, text), color, 0);
         const w = @intToFloat(f32, surface.*.w);
         const alignedPos = switch (alignment) {
             Alignment.LEFT => pos,
@@ -254,7 +245,7 @@ const Viewport = struct {
         return self.view.a.add(self.view.size().mul(norm));
     }
 
-    pub fn toScreen(self: *const Viewport, rect: Rect) sdl.SDL_Rect {
+    pub fn toScreen(self: *const Viewport, rect: Rect) sdl.c.SDL_Rect {
         const a = Vec{
             .x = (rect.a.x + self.translation.x)*self.scale,
             .y = (rect.a.y + self.translation.y)*self.scale,
@@ -269,34 +260,34 @@ const Viewport = struct {
         };
     }
 
-    pub fn onEvent(self: *Viewport, event: *sdl.SDL_Event) void {
+    pub fn onEvent(self: *Viewport, event: *sdl.c.SDL_Event) void {
         const delta = self.view.height() / 10.0;
         const mouseZoom = 1.1;
         const kbdZoom = 1.7;
 
         switch (event.type) {
-            sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
-                sdl.SDLK_UP => {
+            sdl.c.SDL_KEYDOWN => switch (event.key.keysym.sym) {
+                sdl.c.SDLK_UP => {
                     self.view = self.view.translate(.{ .x = 0, .y = -delta });
                 },
-                sdl.SDLK_DOWN => {
+                sdl.c.SDLK_DOWN => {
                     self.view = self.view.translate(.{ .x = 0, .y = delta });
                 },
-                sdl.SDLK_LEFT => {
+                sdl.c.SDLK_LEFT => {
                     self.view = self.view.translate(.{ .x = -delta, .y = 0 });
                 },
-                sdl.SDLK_RIGHT => {
+                sdl.c.SDLK_RIGHT => {
                     self.view = self.view.translate(.{ .x = delta, .y = 0 });
                 },
-                sdl.SDLK_PAGEUP => {
+                sdl.c.SDLK_PAGEUP => {
                     self.view = Rect.centered(self.view.center(), self.view.size().scale(kbdZoom));
                 },
-                sdl.SDLK_PAGEDOWN => {
+                sdl.c.SDLK_PAGEDOWN => {
                     self.view = Rect.centered(self.view.center(), self.view.size().scale(1.0 / kbdZoom));
                 },
                 else => {},
             },
-            sdl.SDL_MOUSEWHEEL => {
+            sdl.c.SDL_MOUSEWHEEL => {
                 const z: f32 = if (event.wheel.y > 0) mouseZoom else 1.0 / mouseZoom;
                 self.view = Rect.centered(self.view.center(), self.view.size().scale(z));
             },

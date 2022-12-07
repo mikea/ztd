@@ -51,7 +51,11 @@ pub fn initLevel1(game: *Game, allocator: std.mem.Allocator) !void {
             while (curDist < p.dist(last)) {
                 const delta = last.dir(p).scale(curDist);
                 const next = last.add(delta);
-                try game.addMonster(next, if (m % 10 != 9) &data.Orc else &data.RedMonster);
+                try game.addMonster(next, switch (m % 10) {
+                    0,8 => &data.ArcherGoblin,
+                    9 => &data.RedMonster,
+                    else => &data.Orc,
+                });
                 m += 1;
 
                 last = next;
