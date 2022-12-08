@@ -1,5 +1,6 @@
 const resources = @import("resources.zig");
 const sdl = @import("sdl.zig");
+const table = @import("table.zig");
 
 pub const Id = u32;
 pub const maxId: usize = 1 << 18;
@@ -12,8 +13,10 @@ pub const Health = struct {
 };
 
 pub const Tower = struct {
+    name: []const u8,
     upgradeCost: usize,
 };
+pub const TowersTable = table.Table(Id, maxId, Tower);
 
 pub const Monster = struct {
     speed: f32,
@@ -22,12 +25,10 @@ pub const Monster = struct {
 
 pub const Attacker = struct {
     range: f32,
+    damage: f32,
     attack: union(AttackType) {
-        direct: struct {
-            damage: f32,
-        },
+        direct: void,
         projectile: struct {
-            damage: f32,
             speed: f32,
             sheet: resources.SpriteSheets,
         },

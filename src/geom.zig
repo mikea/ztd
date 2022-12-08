@@ -81,7 +81,7 @@ pub const Vec = struct {
     }
 
     pub fn grid(self: *const Vec, gridX: f32, gridY: f32) Vec {
-        return .{ .x = gridX * @floor(self.x / gridX), .y = gridY * @floor(self.y / gridY) };
+        return .{ .x = gridX * @round(self.x / gridX), .y = gridY * @round(self.y / gridY) };
     }
 };
 

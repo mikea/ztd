@@ -52,8 +52,6 @@ const Statistics = struct {
 };
 
 pub fn main() !void {
-    std.log.info("Starting application, contentDir={s}", .{contentDir});
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer {
@@ -64,8 +62,6 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    std.debug.print("Arguments: {s}\n", .{args});
-
     try checkInt(sdl.c.SDL_Init(sdl.c.SDL_INIT_VIDEO));
     defer {
         sdl.c.SDL_Quit();
@@ -74,7 +70,6 @@ pub fn main() !void {
 
     var displayMode: sdl.c.SDL_DisplayMode = undefined;
     try checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
-    std.debug.print("displayMode: {}\n", .{displayMode});
 
     const window = try checkNotNull(sdl.c.SDL_Window, sdl.c.SDL_CreateWindow("ZTD", sdl.c.SDL_WINDOWPOS_UNDEFINED, sdl.c.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.c.SDL_WINDOW_SHOWN));
     defer sdl.c.SDL_DestroyWindow(window);

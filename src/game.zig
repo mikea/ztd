@@ -27,7 +27,6 @@ const Projectile = struct {
 
 const AttackersTable = Table(Id, maxId, model.Attacker);
 const MonstersTable = Table(Id, maxId, model.Monster);
-pub const TowersTable = Table(Id, maxId, model.Tower);
 const ProjectilesTable = Table(Id, maxId, Projectile);
 
 pub const Game = struct {
@@ -38,7 +37,7 @@ pub const Game = struct {
 
     attackers: AttackersTable,
     projectiles: ProjectilesTable,
-    towers: TowersTable,
+    towers: model.TowersTable,
 
     monsters: MonstersTable,
 
@@ -53,11 +52,11 @@ pub const Game = struct {
             .engine = eng,
             .resources = res,
             .attackers = try AttackersTable.init(allocator),
-            .towers = try TowersTable.init(allocator),
+            .towers = try model.TowersTable.init(allocator),
             .monsters = try MonstersTable.init(allocator),
             .projectiles = try ProjectilesTable.init(allocator),
         };
-        game.ui = try ui.UI.init(game);
+        game.ui = try ui.UI.init(allocator, game);
         return game;
     }
 
@@ -66,6 +65,7 @@ pub const Game = struct {
         self.towers.deinit();
         self.projectiles.deinit();
         self.attackers.deinit();
+        self.ui.deinit();
     }
 
     fn delete(self: *Game, id: Id) !void {
@@ -200,11 +200,11 @@ pub const Game = struct {
                 attacker.*.lastAttack = ticks;
                 switch (attacker.attack) {
                     .direct => {
-                        targetHealth.*.health -= attacker.attack.direct.damage;
+                        targetHealth.*.health -= attacker.damage;
                     },
                     .projectile => |*projectile| {
                         const id = self.engine.ids.nextId();
-                        try self.projectiles.set(id, .{ .target = attacker.target, .v = projectile.speed, .damage = projectile.damage });
+                        try self.projectiles.set(id, .{ .target = attacker.target, .v = projectile.speed, .damage = attacker.damage });
                         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
                         try self.engine.sprites.set(id, (self.resources.getSheet(projectile.sheet)).sprite(0, 0, 90));
                     },

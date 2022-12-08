@@ -10,7 +10,7 @@ const sdl = @import("sdl.zig");
 const data = @import("data.zig");
 
 pub fn initLevel1(game: *Game, allocator: std.mem.Allocator) !void {
-    try game.addTower(.{ .x = 0, .y = 0 }, &data.MagicTower);
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
 
     const points = try allocator.alloc(Vec, 20000);
     defer allocator.free(points);

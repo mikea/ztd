@@ -8,10 +8,12 @@ pub const SpriteSheets = enum {
     RED_DEMON,
     WOOD_KEEP,
     WOOD_TOWER,
+    WOOD_TOWER2,
 
     // projectiles
     FIREBALL_PROJECTILE,
     SHORT_ARROW,
+    LONG_ARROW,
 };
 
 pub const Resources = struct {
@@ -50,7 +52,9 @@ pub fn loadSheet(renderer: *sdl.Renderer, sheet: SpriteSheets) !sdl.SpriteSheet 
         SpriteSheets.RED_DEMON => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16),
         SpriteSheets.WOOD_KEEP => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Keep.png", 32, 32),
         SpriteSheets.WOOD_TOWER => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16),
+        SpriteSheets.WOOD_TOWER2 => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower2.png", 16, 16),
         SpriteSheets.FIREBALL_PROJECTILE => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16),
         SpriteSheets.SHORT_ARROW => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/ArrowShort.png", 16, 16),
+        SpriteSheets.LONG_ARROW => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/ArrowLong.png", 16, 16),
     };
 }
