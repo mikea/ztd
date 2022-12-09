@@ -17,22 +17,11 @@ const Mode = enum {
     BUILD,
 };
 
-const ActionType = enum {
-    BUILD_MODE,
-    CANCEL,
-    SET_TOWER_PROTOTYPE,
-    UPGRADE_RATE,
-    UPGRADE_DAMAGE,
-    UPGRADE_RANGE,
-};
-
-const Action = union(ActionType) {
+const Action = union(enum) {
     BUILD_MODE: void,
     CANCEL: void,
     SET_TOWER_PROTOTYPE: *const data.TowerData,
-    UPGRADE_RATE: void,
-    UPGRADE_DAMAGE: void,
-    UPGRADE_RANGE: void,
+    UPGRADE_TOWER: struct { attribute: enum { RANGE, DAMAGE, RATE } },
 };
 
 const MenuItem = struct {
@@ -98,11 +87,11 @@ pub const UI = struct {
                         self.selectedTower = try self.findTower(pos);
                         self.menu.clearAndFree();
 
-                        try self.menu.append(.{ .text = "Upgrade Damage", .key = sdl.c.SDLK_1, .action = Action.UPGRADE_DAMAGE });
-                        try self.menu.append(.{ .text = "Upgrade Range", .key = sdl.c.SDLK_2, .action = Action.UPGRADE_RANGE });
-                        try self.menu.append(.{ .text = "Upgrade Rate", .key = sdl.c.SDLK_3, .action = Action.UPGRADE_RATE });
+                        try self.menu.append(.{ .text = "Upgrade Damage", .key = sdl.c.SDLK_1, .action = .{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } } });
+                        try self.menu.append(.{ .text = "Upgrade Range", .key = sdl.c.SDLK_2, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RANGE } } });
+                        try self.menu.append(.{ .text = "Upgrade Rate", .key = sdl.c.SDLK_3, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RATE } } });
 
-                        try self.menu.append(.{ .text = "Cancel", .key = sdl.c.SDLK_ESCAPE, .action = Action.CANCEL });
+                        try self.menu.append(.{ .text = "Cancel", .key = sdl.c.SDLK_ESCAPE, .action = .CANCEL });
                     },
                 }
             },
@@ -135,28 +124,18 @@ pub const UI = struct {
                 self.towerPrototype = tower;
             },
             // todo: clean up upgrades
-            .UPGRADE_DAMAGE => if (self.selectedTower) |tower| {
+            .UPGRADE_TOWER => |upgrade| if (self.selectedTower) |tower| {
                 if (self.game.money >= tower.value.upgradeCost) {
                     self.game.money -= tower.value.upgradeCost;
                     tower.value.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, tower.value.upgradeCost) * 1.1));
                     const attacker = try self.game.attackers.get(tower.id);
-                    attacker.*.damage = @round(attacker.*.damage * 1.2);
-                }
-            },
-            .UPGRADE_RATE => if (self.selectedTower) |tower| {
-                if (self.game.money >= tower.value.upgradeCost) {
-                    self.game.money -= tower.value.upgradeCost;
-                    tower.value.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, tower.value.upgradeCost) * 1.1));
-                    const attacker = try self.game.attackers.get(tower.id);
-                    attacker.*.attackDelayMs = @floatToInt(usize, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.2));
-                }
-            },
-            .UPGRADE_RANGE => if (self.selectedTower) |tower| {
-                if (self.game.money >= tower.value.upgradeCost) {
-                    self.game.money -= tower.value.upgradeCost;
-                    tower.value.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, tower.value.upgradeCost) * 1.1));
-                    const attacker = try self.game.attackers.get(tower.id);
-                    attacker.*.range = @round(attacker.*.range * 1.2);
+
+                    switch (upgrade.attribute) {
+                        .DAMAGE => attacker.*.damage = @round(attacker.*.damage * 1.2),
+                        .RATE => attacker.*.attackDelayMs = @floatToInt(usize, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.2)),
+
+                        .RANGE => attacker.*.range = @round(attacker.*.range * 1.2),
+                    }
                 }
             },
         }
@@ -182,7 +161,11 @@ pub const UI = struct {
 
     pub fn update(self: *@This(), frameAllocator: std.mem.Allocator) !void {
         try self.updateSelection();
+        try self.updateBuildShadow();
+        try self.updateText(frameAllocator);
+    }
 
+    pub fn updateText(self: *@This(), frameAllocator: std.mem.Allocator) !void {
         var textArray = std.ArrayList(u8).init(frameAllocator);
         var writer = textArray.writer();
         try self.printStatus(writer);
@@ -191,15 +174,6 @@ pub const UI = struct {
         try textArray.append(0);
 
         try self.engine.setText(self.textId, textArray.items[0..(textArray.items.len - 1) :0], .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
-
-        // update build shadow
-        if (self.mode == Mode.BUILD) {
-            try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
-            try self.engine.sprites.set(self.shadowId, self.resources.getSheet(self.towerPrototype.sheet).sprite(self.towerPrototype.sprite.x, self.towerPrototype.sprite.y, 0));
-        } else {
-            try self.engine.bounds.delete(self.shadowId);
-            try self.engine.sprites.delete(self.shadowId);
-        }
     }
 
     fn printStatus(self: *@This(), writer: anytype) !void {
@@ -250,5 +224,15 @@ pub const UI = struct {
         self.selectedTower = null;
         try self.engine.bounds.delete(self.selId);
         try self.engine.sprites.delete(self.selId);
+    }
+
+    fn updateBuildShadow(self: *@This()) !void {
+        if (self.mode == Mode.BUILD) {
+            try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
+            try self.engine.sprites.set(self.shadowId, self.resources.getSheet(self.towerPrototype.sheet).sprite(self.towerPrototype.sprite.x, self.towerPrototype.sprite.y, 0));
+        } else {
+            try self.engine.bounds.delete(self.shadowId);
+            try self.engine.sprites.delete(self.shadowId);
+        }
     }
 };

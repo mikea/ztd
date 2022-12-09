@@ -34,12 +34,11 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         };
 
         const Locs = SparseSet(Id, maxId, Loc);
-        const NodeType = enum { leaf, middle };
 
         parent: ?*This = null,
         rect: Rect = Rect.init(0, 0, 0, 0),
         len: usize = 0,
-        items: union(NodeType) {
+        items: union(enum) {
             leaf: [leafSize + 1]Entry,
             middle: [middleSize + 1]*This,
         },
