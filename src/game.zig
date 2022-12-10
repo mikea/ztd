@@ -264,7 +264,7 @@ pub const Game = struct {
         const c = try sdl.drawCircle(self.engine.renderer, radius, .{.r=1, .g=0, .b=0, .a=0.5}, .fill);
         try self.engine.sprites.set(i, .{.texture = c.texture, .src = .{.x = 0, .y = 0, .w = c.w, .h = c.h}, .angle = 0, .z = .SPLASH_DAMAGE});
         try self.engine.animations.set(i, .{
-            .timed = .{ .endTicks = ticks + 300 },
+            .timed = .{ .endTicks = ticks + 300, .onComplete = .FREE_TEXTURE },
         });
 
         var processor: struct {

@@ -147,6 +147,13 @@ pub const Engine = struct {
                 .timed => |*timed| {
                     if (ticks >= timed.*.endTicks) {
                         try self.toDelete.set(entry.id, {});
+                        switch (timed.onComplete) {
+                            .NOTHING => {},
+                            .FREE_TEXTURE => {
+                                const sprite = try self.sprites.get(entry.id);
+                                sdl.c.SDL_DestroyTexture(sprite.texture);
+                            }
+                        }
                     }
                 },
             }

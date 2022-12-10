@@ -68,6 +68,7 @@ pub const Animation = union(enum) {
     },
     timed: struct {
         endTicks: usize,
+        onComplete: enum { NOTHING, FREE_TEXTURE },
     },
 };
 
