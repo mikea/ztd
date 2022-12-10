@@ -31,7 +31,7 @@ pub const AnimationData = struct {
 pub const RedMonster = MonsterData{
     .size = .{ .x = 10, .y = 10 },
     .monster = .{ .speed = 8, .price = 10 },
-    .attack = .{ .range = 10, .damage = 5, .attack = .{ .direct = {} }, .attackDelayMs = 1000 },
+    .attack = .{ .range = 10, .damage = 5, .attackType = .direct, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 1000, .health = 1000 },
     .animations = .{
         .walk = .{ .delay = 250, .sheet = resources.SpriteSheets.RED_DEMON, .sprites = &[_]model.SpriteCoords{
@@ -46,7 +46,7 @@ pub const RedMonster = MonsterData{
 pub const Orc = MonsterData{
     .size = .{ .x = 8, .y = 8 },
     .monster = .{ .speed = 10, .price = 1 },
-    .attack = .{ .range = 8, .damage = 2, .attack = .{ .direct = {} }, .attackDelayMs = 1000 },
+    .attack = .{ .range = 8, .damage = 2, .attackType = .direct, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 100, .health = 100 },
     .animations = .{
         .walk = .{ .delay = 150, .sheet = resources.SpriteSheets.ORC, .sprites = &[_]model.SpriteCoords{
@@ -64,7 +64,12 @@ pub const ArcherGoblin = MonsterData{
     .attack = .{
         .range = 90,
         .damage = 1,
-        .attack = .{ .projectile = .{ .speed = 100, .sheet = resources.SpriteSheets.SHORT_ARROW } },
+        .attackType = .{ .projectile = .{
+            .damageType = .direct,
+            .speed = 100,
+            .navigation = .FOLLOW,
+            .sheet = resources.SpriteSheets.SHORT_ARROW,
+        } },
         .attackDelayMs = 500,
     },
     .health = .{ .maxHealth = 50, .health = 50 },
@@ -82,10 +87,15 @@ pub const MagicTower = TowerData{
     .size = .{ .x = 8, .y = 8 },
     .tower = .{ .upgradeCost = 10, .name = "magic" },
     .attack = .{
-        .range = 80,
+        .range = 100,
         .attackDelayMs = 700,
         .damage = 40,
-        .attack = .{ .projectile = .{ .speed = 50, .sheet = resources.SpriteSheets.FIREBALL_PROJECTILE } },
+        .attackType = .{ .projectile = .{
+            .damageType = .{ .splash = .{ .radius = 30 } },
+            .speed = 50,
+            .navigation = .POS,
+            .sheet = resources.SpriteSheets.FIREBALL_PROJECTILE,
+        } },
     },
     .health = .{ .maxHealth = 100, .health = 100 },
     .sheet = resources.SpriteSheets.WOOD_TOWER,
@@ -99,7 +109,7 @@ pub const ArcherTower = TowerData{
         .range = 100,
         .attackDelayMs = 200,
         .damage = 90,
-        .attack = .{ .projectile = .{ .speed = 150, .sheet = resources.SpriteSheets.LONG_ARROW } },
+        .attackType = .{ .projectile = .{ .damageType = .direct, .speed = 150, .navigation = .FOLLOW, .sheet = resources.SpriteSheets.LONG_ARROW } },
     },
     .health = .{ .maxHealth = 100, .health = 100 },
     .sheet = resources.SpriteSheets.WOOD_TOWER2,
@@ -110,12 +120,20 @@ pub const BuildTowers = [_]*const TowerData{ &ArcherTower, &MagicTower };
 
 pub const Keep = TowerData{
     .size = .{ .x = 16, .y = 16 },
-    .tower = .{ .upgradeCost = 100, .name = "keep", },
+    .tower = .{
+        .upgradeCost = 100,
+        .name = "keep",
+    },
     .attack = .{
         .range = 200,
         .attackDelayMs = 200,
         .damage = 200,
-        .attack = .{ .projectile = .{ .speed = 400, .sheet = resources.SpriteSheets.FIREBALL_PROJECTILE } },
+        .attackType = .{ .projectile = .{
+            .damageType = .direct,
+            .speed = 400,
+            .navigation = .FOLLOW,
+            .sheet = resources.SpriteSheets.LONG_ARROW,
+        } },
     },
     .health = .{ .maxHealth = 1000, .health = 1000 },
     .sheet = resources.SpriteSheets.WOOD_KEEP,

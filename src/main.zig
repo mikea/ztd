@@ -79,7 +79,6 @@ pub fn main() !void {
     try checkInt(sdl.c.TTF_Init());
     defer sdl.c.TTF_Quit();
 
-    //  | sdl.c.SDL_RENDERER_PRESENTVSYNC
     var renderer = try checkNotNull(sdl.c.SDL_Renderer, sdl.c.SDL_CreateRenderer(window, -1, sdl.c.SDL_RENDERER_ACCELERATED));
     defer sdl.c.SDL_DestroyRenderer(renderer);
 
@@ -128,7 +127,6 @@ pub fn main() !void {
             defer {
                 lastUpdateDuration = timer.read();
             }
-            try eng.update(frameAllocator, ticks);
             try game.update(frameAllocator, ticks);
             try statistics.update(ticks, frameAllocator, game, lastUpdateDuration, lastRenderDuration);
         }

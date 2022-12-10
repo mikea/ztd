@@ -5,7 +5,6 @@ const resources = @import("resources.zig");
 const data = @import("data.zig");
 const ui = @import("ui.zig");
 
-const SparseSet = @import("sparse_set.zig").SparseSet;
 
 const table = @import("table.zig");
 const Table = table.Table;
@@ -18,28 +17,16 @@ const model = @import("model.zig");
 const Id = model.Id;
 const maxId = model.maxId;
 
-
-const Projectile = struct {
-    v: f32,
-    damage: f32,
-    target: Id,
-};
-
-const AttackersTable = Table(Id, maxId, model.Attacker);
-const MonstersTable = Table(Id, maxId, model.Monster);
-const ProjectilesTable = Table(Id, maxId, Projectile);
-
 pub const Game = struct {
     engine: *engine.Engine,
     resources: *resources.Resources,
 
     lastTicks: u32 = 0,
 
-    attackers: AttackersTable,
-    projectiles: ProjectilesTable,
+    attackers: model.AttackersTable,
+    projectiles: model.ProjectilesTable,
     towers: model.TowersTable,
-
-    monsters: MonstersTable,
+    monsters: model.MonstersTable,
 
     ui: ui.UI = undefined,
     towersUpdated: bool = false,
@@ -51,10 +38,10 @@ pub const Game = struct {
         game.* = .{
             .engine = eng,
             .resources = res,
-            .attackers = try AttackersTable.init(allocator),
+            .attackers = try model.AttackersTable.init(allocator),
             .towers = try model.TowersTable.init(allocator),
-            .monsters = try MonstersTable.init(allocator),
-            .projectiles = try ProjectilesTable.init(allocator),
+            .monsters = try model.MonstersTable.init(allocator),
+            .projectiles = try model.ProjectilesTable.init(allocator),
         };
         game.ui = try ui.UI.init(allocator, game);
         return game;
@@ -83,10 +70,13 @@ pub const Game = struct {
         try self.engine.healths.set(id, d.health);
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
         try self.engine.animations.set(id, .{
-            .animationDelay = d.animations.walk.delay,
-            .i = id % d.animations.walk.sprites.len,
-            .sheet = self.resources.getSheet(d.animations.walk.sheet),
-            .sprites = d.animations.walk.sprites,
+            .sprites = .{
+                .animationDelay = d.animations.walk.delay,
+                .i = id % d.animations.walk.sprites.len,
+                .sheet = self.resources.getSheet(d.animations.walk.sheet),
+                .coords = d.animations.walk.sprites,
+                .z = .MONSTER,
+            },
         });
     }
 
@@ -96,7 +86,7 @@ pub const Game = struct {
         try self.attackers.set(id, d.attack);
         try self.engine.healths.set(id, d.health);
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
-        try self.engine.sprites.set(id, (self.resources.getSheet(d.sheet)).sprite(d.sprite.x, d.sprite.y, 0));
+        try self.engine.sprites.set(id, (self.resources.getSheet(d.sheet)).sprite(d.sprite.x, d.sprite.y, 0, .TOWER));
         self.towersUpdated = true;
     }
 
@@ -113,7 +103,7 @@ pub const Game = struct {
                 const pos = (try self.engine.bounds.get(entry.*.id)).center();
 
                 var collector: struct {
-                    monsters: *MonstersTable,
+                    monsters: *model.MonstersTable,
                     pos: Vec,
                     closestId: Id = 0,
                     closestDistance: f32 = std.math.f32_max,
@@ -198,15 +188,22 @@ pub const Game = struct {
                 }
 
                 attacker.*.lastAttack = ticks;
-                switch (attacker.attack) {
+                switch (attacker.attackType) {
                     .direct => {
                         targetHealth.*.health -= attacker.damage;
                     },
+                    .splash => {
+                        @panic("not implemented");
+                    },
                     .projectile => |*projectile| {
                         const id = self.engine.ids.nextId();
-                        try self.projectiles.set(id, .{ .target = attacker.target, .v = projectile.speed, .damage = attacker.damage });
+                        const nav: model.Navigation = switch (projectile.navigation) {
+                            .POS => .{ .pos = target.center() },
+                            .FOLLOW => .{ .target = attacker.target },
+                        };
+                        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage });
                         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-                        try self.engine.sprites.set(id, (self.resources.getSheet(projectile.sheet)).sprite(0, 0, 90));
+                        try self.engine.sprites.set(id, (self.resources.getSheet(projectile.sheet)).sprite(0, 0, 90, .PROJECTILE));
                     },
                 }
             }
@@ -223,59 +220,100 @@ pub const Game = struct {
                 const id = entry.*.id;
                 const projectile = try self.engine.bounds.get(id);
 
-                if (self.engine.healths.find(entry.*.value.target)) |targetHealth| {
-                    const target = (try self.engine.bounds.get(entry.*.value.target)).center();
-                    const ds = entry.*.value.v * dt;
-                    const dir = target.minus(projectile.center());
-                    const n = dir.norm();
-                    if (n < ds) {
-                        // will self-destruct
-                        entry.*.value.target = 0;
-                        targetHealth.*.health -= entry.*.value.damage;
-                    } else {
-                        const dn = dir.scale(ds / n);
-                        try self.engine.bounds.update(id, projectile.translate(dn));
-                        (try self.engine.sprites.get(id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
+                const targetPos = switch (entry.*.value.navigation) {
+                    .pos => |pos| pos,
+                    .target => |targetId| if (self.engine.healths.find(targetId) != null) (try self.engine.bounds.get(targetId)).center() else {
+                        try self.engine.toDelete.set(id, {});
+                        continue;
+                    },
+                };
+
+                const ds = entry.*.value.v * dt;
+                const dir = targetPos.minus(projectile.center());
+                const n = dir.norm();
+                if (n < ds) {
+                    try self.engine.toDelete.set(id, {});
+                    switch (entry.*.value.damageType) {
+                        .direct => {
+                            switch (entry.*.value.navigation) {
+                                .target => |targetId| {
+                                    var target = try self.engine.healths.get(targetId);
+                                    target.*.health -= entry.*.value.damage;
+                                },
+                                else => {
+                                    @panic("not implemented");
+                                },
+                            }
+                        },
+                        .splash => |splash| {
+                            try self.addSplashDamage(ticks, targetPos, splash.radius, entry.*.value.damage);
+                        },
                     }
                 } else {
-                    // will self-destruct
-                    entry.*.value.target = 0;
+                    const dn = dir.scale(ds / n);
+                    try self.engine.bounds.update(id, projectile.translate(dn));
+                    (try self.engine.sprites.get(id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
                 }
             }
         }
     }
 
-    pub fn updateDead(self: *Game, frameAllocator: std.mem.Allocator) !void {
-        var toDelete = try SparseSet(Id, maxId, void).init(frameAllocator);
-        defer toDelete.deinit();
+    fn addSplashDamage(self: *Game, ticks: usize, pos: Vec, radius: f32, damage: f32) !void {
+        const i = self.engine.ids.nextId();
+        try self.engine.bounds.set(i, Rect.initCentered(pos.x, pos.y, radius * 2, radius * 2));
+        const c = try sdl.drawCircle(self.engine.renderer, radius, .{.r=1, .g=0, .b=0, .a=0.5}, .fill);
+        try self.engine.sprites.set(i, .{.texture = c.texture, .src = .{.x = 0, .y = 0, .w = c.w, .h = c.h}, .angle = 0, .z = .SPLASH_DAMAGE});
+        try self.engine.animations.set(i, .{
+            .timed = .{ .endTicks = ticks + 300 },
+        });
 
-        {
-            // remove 0 health
-            var it = self.engine.healths.iterator();
-            while (it.next()) |*entry| {
-                if (entry.*.value.health <= 0) {
-                    try toDelete.set(entry.*.id, {});
-                    if (self.monsters.find(entry.*.id)) |monster| {
-                        self.money += monster.*.price;
+        var processor: struct {
+            pos: Vec,
+            radius: f32,
+            damage: f32,
+            monsters: *model.MonstersTable,
+            healths: *model.HealthsTable,
+
+            pub fn callback(s: *@This(), id: Id, r: Rect) error{OutOfMemory}!void {
+                if (r.center().dist(s.pos) > s.radius) return;
+
+                if (s.monsters.find(id) != null) {
+                    if (s.healths.find(id)) |*h| {
+                        h.*.health -= s.damage;
                     }
                 }
             }
-        }
+        } = .{
+            .monsters = &self.monsters,
+            .healths = &self.engine.healths,
+            .pos = pos,
+            .radius = radius,
+            .damage = damage,
+        };
 
-        {
-            // remove projectiles that lost their target
-            var it = self.projectiles.iterator();
-            while (it.next()) |*entry| {
-                if (entry.*.value.target == 0) {
-                    try toDelete.set(entry.*.id, {});
+        try self.engine.bounds.findIntersect(Rect.initCentered(pos.x, pos.y, radius * 2, radius * 2), @TypeOf(processor), &processor, @TypeOf(processor).callback);
+    }
+
+    fn updateDead(self: *Game) !void {
+        // remove 0 health
+        var it = self.engine.healths.iterator();
+        while (it.next()) |*entry| {
+            if (entry.*.value.health <= 0) {
+                try self.engine.toDelete.set(entry.*.id, {});
+                if (self.monsters.find(entry.*.id)) |monster| {
+                    self.money += monster.*.price;
                 }
             }
         }
+    }
 
-        var toDeleteIt = toDelete.iterator();
+    fn updateDeleted(self: *Game) !void {
+        var toDeleteIt = self.engine.toDelete.iterator();
         while (toDeleteIt.next()) |entry| {
             try self.delete(entry.id);
         }
+
+        self.engine.toDelete.clear();
     }
 
     pub fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: u32) !void {
@@ -284,22 +322,30 @@ pub const Game = struct {
             return;
         }
 
+
         try self.updateMonsters(ticks);
         try self.updateTowers();
         try self.updateAttackers(ticks);
+
         try self.updateProjectiles(ticks);
-        try self.updateDead(frameAllocator);
-        try self.ui.update(frameAllocator);
+        try self.updateDeleted();
+
+        try self.updateDead();
+        try self.updateDeleted();
+
+        try self.engine.updateAnimations(ticks);
+        try self.updateDeleted();
 
         if (self.monsters.size() == 0) {
             std.log.info("YOU WON!!!!\n", .{});
             std.c.exit(0);
         }
-
         if (self.towers.size() == 0) {
             std.debug.print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
             std.c.exit(0);
         }
+
+        try self.ui.update(frameAllocator);
 
         self.lastTicks = ticks;
         self.towersUpdated = false;

@@ -1,6 +1,7 @@
 const resources = @import("resources.zig");
 const sdl = @import("sdl.zig");
 const table = @import("table.zig");
+const Vec = @import("geom.zig").Vec;
 
 pub const Id = u32;
 pub const maxId: usize = 1 << 18;
@@ -11,6 +12,7 @@ pub const Health = struct {
     maxHealth: f32,
     health: f32,
 };
+pub const HealthsTable = table.Table(Id, maxId, Health);
 
 pub const Tower = struct {
     name: []const u8,
@@ -22,30 +24,80 @@ pub const Monster = struct {
     speed: f32,
     price: usize,
 };
+pub const MonstersTable = table.Table(Id, maxId, Monster);
+
+pub const DamageType = union(enum) {
+    direct: void,
+    splash: struct {
+        radius: f32,
+    },
+};
+
+pub const AttackType = union(enum) {
+    direct: void,
+    splash: struct {
+        radius: f32,
+    },
+    projectile: struct {
+        speed: f32,
+        sheet: resources.SpriteSheets,
+        navigation: enum { POS, FOLLOW },
+        damageType: DamageType,
+    },
+};
 
 pub const Attacker = struct {
     range: f32,
     damage: f32,
-    attack: union(AttackType) {
-        direct: void,
-        projectile: struct {
-            speed: f32,
-            sheet: resources.SpriteSheets,
-        },
-    },
+    attackType: AttackType,
     attackDelayMs: u64,
     lastAttack: u64 = 0,
     target: Id = 0, // pointer to Health record
 };
-
-pub const AttackType = enum { direct, projectile };
+pub const AttackersTable = table.Table(Id, maxId, Attacker);
 
 pub const SpriteCoords = struct { x: u8, y: u8 };
 
-pub const Animation = struct {
-    sheet: *const sdl.SpriteSheet,
-    sprites: []const SpriteCoords,
-    animationDelay: u32,
-    i: usize = 0,
-    lastFrame: u64 = 0,
+pub const Animation = union(enum) {
+    sprites: struct {
+        sheet: *const sdl.SpriteSheet,
+        coords: []const SpriteCoords,
+        animationDelay: u32,
+        z: Layer,
+        i: usize = 0,
+    },
+    timed: struct {
+        endTicks: usize,
+    },
+};
+
+pub const Navigation = union(enum) {
+    pos: Vec,
+    target: Id,
+};
+
+pub const Projectile = struct {
+    v: f32,
+    damage: f32,
+    damageType: DamageType,
+    navigation: Navigation,
+};
+pub const ProjectilesTable = table.Table(Id, maxId, Projectile);
+
+pub const Layer = enum {
+    SPLASH_DAMAGE,
+    MONSTER,
+    TOWER,
+    PROJECTILE,
+    UI,
+};
+
+// todo: use metaprogramming
+pub const Layers = [_]Layer{ .SPLASH_DAMAGE, .MONSTER, .TOWER, .PROJECTILE, .UI };
+
+pub const Sprite = struct {
+    texture: *sdl.c.SDL_Texture,
+    src: sdl.c.SDL_Rect,
+    angle: f64,
+    z: Layer,
 };

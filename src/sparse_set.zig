@@ -90,6 +90,7 @@ pub fn SparseSet(
             if (self.find(i)) |entry| {
                 return &entry.value;
             }
+            // @panic("row not found");
             return Error.RowNotFound;
         }
 
@@ -113,6 +114,10 @@ pub fn SparseSet(
 
         pub fn size(self: *const @This()) usize {
             return self.dense.items.len;
+        }
+
+        pub fn clear(self: *@This()) void {
+            self.dense.clearAndFree();
         }
     };
 }

@@ -1,6 +1,5 @@
 const std = @import("std");
 const table = @import("table.zig");
-const geom = @import("geom.zig");
 
 const model = @import("model.zig");
 const Id = model.Id;
@@ -9,11 +8,12 @@ const maxId = model.maxId;
 const sdl = @import("sdl.zig");
 const checkNotNull = sdl.checkNotNull;
 const checkInt = sdl.checkInt;
-const Sprite = sdl.Sprite;
 
+const geom = @import("geom.zig");
 const Vec = geom.Vec;
 const Rect = geom.Rect;
 
+const SparseSet = @import("sparse_set.zig").SparseSet;
 
 pub const IdManager = struct {
     i: Id = 0,
@@ -22,6 +22,8 @@ pub const IdManager = struct {
         if (self.i == maxId) {
             std.log.err("too many ids allocated: max={}", .{maxId});
             @panic("too many ids");
+        } else if ((maxId - self.i) % 10000 == 0) {
+            std.log.debug("remainig {} ids", .{maxId - self.i});
         }
         // no id 0!
         self.i += 1;
@@ -51,19 +53,20 @@ pub const Text = struct {
 pub const Engine = struct {
     const BoundsTable = table.RTable(Id, maxId);
     const TextsTable = table.Table(Id, maxId, Text);
-    const SpritesTable = table.Table(Id, maxId, Sprite);
+    const SpritesTable = table.Table(Id, maxId, model.Sprite);
     const AnimationsTable = table.Table(Id, maxId, model.Animation);
-    const HealthsTable = table.Table(Id, maxId, model.Health);
 
     viewport: Viewport,
     renderer: *sdl.Renderer,
 
     // tables
+    // will be deleted at the end of the update
+    toDelete: SparseSet(Id, maxId, void),
     bounds: BoundsTable,
     texts: TextsTable,
     sprites: SpritesTable,
     animations: AnimationsTable,
-    healths: HealthsTable,
+    healths: model.HealthsTable,
 
     ids: IdManager = .{},
     running: bool = true,
@@ -79,11 +82,12 @@ pub const Engine = struct {
 
         return .{
             .renderer = renderer,
+            .toDelete = try SparseSet(Id, maxId, void).init(allocator),
             .bounds = try BoundsTable.init(allocator),
             .texts = try TextsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
             .animations = try AnimationsTable.init(allocator),
-            .healths = try HealthsTable.init(allocator),
+            .healths = try model.HealthsTable.init(allocator),
             .viewport = Viewport.init(displaySize),
         };
     }
@@ -94,6 +98,7 @@ pub const Engine = struct {
         self.sprites.deinit();
         self.animations.deinit();
         self.healths.deinit();
+        self.toDelete.deinit();
     }
 
     pub fn delete(self: *Engine, id: Id) !void {
@@ -128,21 +133,23 @@ pub const Engine = struct {
         return null;
     }
 
-    pub fn update(self: *Engine, _: std.mem.Allocator, ticks: u32) !void {
-        try self.updateAnimations(ticks);
-    }
-
-    fn updateAnimations(self: *Engine, ticks: u32) !void {
+    pub fn updateAnimations(self: *Engine, ticks: u32) !void {
         // advance animation
         var it = self.animations.iterator();
         while (it.next()) |entry| {
             const animation = &entry.value;
-            if (ticks - animation.lastFrame > animation.animationDelay) {
-                animation.i = (animation.i + 1) % animation.sprites.len;
-                animation.lastFrame = ticks;
+            switch (animation.*) {
+                .sprites => |*sprites| {
+                    const i = (ticks / sprites.animationDelay + sprites.i) % sprites.coords.len;
+                    const coords = sprites.coords[i];
+                    try self.sprites.set(entry.id, sprites.sheet.sprite(coords.x, coords.y, 0, sprites.z));
+                },
+                .timed => |*timed| {
+                    if (ticks >= timed.*.endTicks) {
+                        try self.toDelete.set(entry.id, {});
+                    }
+                },
             }
-            const coords = animation.sprites[animation.i];
-            try self.sprites.set(entry.id, animation.sheet.sprite(coords.x, coords.y, 0));
         }
     }
 
@@ -155,23 +162,29 @@ pub const Engine = struct {
         try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
         try checkInt(sdl.c.SDL_RenderClear(self.renderer));
 
-        // draw sprites
-        var it = self.sprites.iterator();
-        while (it.next()) |*entry| {
-            const sprite = entry.*.value;
-            const rect = try self.bounds.get(entry.*.id);
-            if (self.viewport.view.intersects(rect)) {
-                const destRect = self.viewport.toScreen(rect);
-                try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.c.SDL_FLIP_NONE));
+        for (model.Layers) |layer| {
+            for (self.sprites.sparse.dense.items) |*entry| {
+                const sprite = entry.*.value;
+                if (layer != sprite.z) {
+                    continue;
+                }
+                const rect = try self.bounds.get(entry.*.id);
+                if (self.viewport.view.intersects(rect)) {
+                    const destRect = self.viewport.toScreen(rect);
+                    try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.c.SDL_FLIP_NONE));
 
-                if (self.healths.find(entry.*.id)) |health| {
-                    if (health.*.health < health.*.maxHealth) {
-                        // display health underneath the main sprite
-                        const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
-                        const healthRect = Rect{.a = .{.x = rect.a.x, .y = rect.b.y}, .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1}, };
-                        const destHealthRect = self.viewport.toScreen(healthRect);
-                        try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0, 255, 0, 255));
-                        try checkInt(sdl.c.SDL_RenderFillRect(self.renderer, &destHealthRect));
+                    if (self.healths.find(entry.*.id)) |health| {
+                        if (health.*.health < health.*.maxHealth) {
+                            // display health underneath the main sprite
+                            const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
+                            const healthRect = Rect{
+                                .a = .{ .x = rect.a.x, .y = rect.b.y },
+                                .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1 },
+                            };
+                            const destHealthRect = self.viewport.toScreen(healthRect);
+                            try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0, 255, 0, 255));
+                            try checkInt(sdl.c.SDL_RenderFillRect(self.renderer, &destHealthRect));
+                        }
                     }
                 }
             }
@@ -247,8 +260,8 @@ const Viewport = struct {
 
     pub fn toScreen(self: *const Viewport, rect: Rect) sdl.c.SDL_Rect {
         const a = Vec{
-            .x = (rect.a.x + self.translation.x)*self.scale,
-            .y = (rect.a.y + self.translation.y)*self.scale,
+            .x = (rect.a.x + self.translation.x) * self.scale,
+            .y = (rect.a.y + self.translation.y) * self.scale,
         };
         const size = rect.size().scale(self.scale);
 

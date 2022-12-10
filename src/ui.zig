@@ -214,8 +214,9 @@ pub const UI = struct {
                     const pos = (try self.engine.bounds.get(towerEntry.id)).center();
                     const attacker = try self.game.attackers.get(towerEntry.id);
                     const range = attacker.range;
-                    try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, range * 2, range * 2));
-                    try self.engine.sprites.set(self.selId, try sdl.drawCircle(self.engine.renderer, range));
+                    const c = try sdl.drawCircle(self.engine.renderer, range, .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 }, .{ .stroke = .{ .w = 0.5 } });
+                    try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, c.w), @intToFloat(f32, c.h)));
+                    try self.engine.sprites.set(self.selId, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angle = 0, .z = .UI });
                     return;
                 }
             }
@@ -229,7 +230,8 @@ pub const UI = struct {
     fn updateBuildShadow(self: *@This()) !void {
         if (self.mode == Mode.BUILD) {
             try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
-            try self.engine.sprites.set(self.shadowId, self.resources.getSheet(self.towerPrototype.sheet).sprite(self.towerPrototype.sprite.x, self.towerPrototype.sprite.y, 0));
+            const sprite = self.resources.getSheet(self.towerPrototype.sheet).sprite(self.towerPrototype.sprite.x, self.towerPrototype.sprite.y, 0, .UI);
+            try self.engine.sprites.set(self.shadowId, sprite);
         } else {
             try self.engine.bounds.delete(self.shadowId);
             try self.engine.sprites.delete(self.shadowId);
