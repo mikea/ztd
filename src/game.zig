@@ -30,7 +30,7 @@ pub const Game = struct {
 
     ui: ui.UI = undefined,
     towersUpdated: bool = false,
-    money: usize = 0,
+    money: usize = 10,
     towerPrice: usize = 10,
 
     pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, res: *resources.Resources) !*Game {
@@ -98,9 +98,9 @@ pub const Game = struct {
         {
             // update closest monsters
             var it = self.towers.iterator();
-            while (it.next()) |*entry| {
-                const attacker = try self.attackers.get(entry.*.id);
-                const pos = (try self.engine.bounds.get(entry.*.id)).center();
+            while (it.next()) |entry| {
+                const attacker = try self.attackers.get(entry.id);
+                const pos = (try self.engine.bounds.get(entry.id)).center();
 
                 var collector: struct {
                     monsters: *model.MonstersTable,
@@ -134,10 +134,10 @@ pub const Game = struct {
 
         // move monsters
         var it = self.monsters.iterator();
-        while (it.next()) |*entry| {
-            const bound = try self.engine.bounds.get(entry.*.id);
+        while (it.next()) |entry| {
+            const bound = try self.engine.bounds.get(entry.id);
             const loc = bound.center();
-            const attacker = try self.attackers.get(entry.*.id);
+            const attacker = try self.attackers.get(entry.id);
 
             if (self.towersUpdated or self.towers.find(attacker.*.target) == null) {
                 // find closest tower
@@ -159,9 +159,9 @@ pub const Game = struct {
             const dir = Vec.minus(targetLoc, loc);
             const range = dir.norm();
             if (range > attacker.*.range) {
-                const ds = std.math.min(range - attacker.*.range, entry.*.value.speed * dt);
+                const ds = std.math.min(range - attacker.*.range, entry.value.speed * dt);
                 const dn = dir.scale(ds / range);
-                try self.engine.bounds.update(entry.*.id, bound.translate(dn));
+                try self.engine.bounds.update(entry.id, bound.translate(dn));
             }
         }
     }
@@ -172,9 +172,9 @@ pub const Game = struct {
 
     fn updateAttackers(self: *Game, ticks: u32) !void {
         var it = self.attackers.iterator();
-        while (it.next()) |*entry| {
-            const pos = (try self.engine.bounds.get(entry.*.id)).center();
-            const attacker = &entry.*.value;
+        while (it.next()) |entry| {
+            const pos = (try self.engine.bounds.get(entry.id)).center();
+            const attacker = entry.value;
 
             if (ticks - attacker.*.lastAttack < attacker.*.attackDelayMs) {
                 continue;
@@ -216,11 +216,11 @@ pub const Game = struct {
             const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
 
             var it = self.projectiles.iterator();
-            while (it.next()) |*entry| {
-                const id = entry.*.id;
+            while (it.next()) |entry| {
+                const id = entry.id;
                 const projectile = try self.engine.bounds.get(id);
 
-                const targetPos = switch (entry.*.value.navigation) {
+                const targetPos = switch (entry.value.navigation) {
                     .pos => |pos| pos,
                     .target => |targetId| if (self.engine.healths.find(targetId) != null) (try self.engine.bounds.get(targetId)).center() else {
                         try self.engine.toDelete.set(id, {});
@@ -228,17 +228,17 @@ pub const Game = struct {
                     },
                 };
 
-                const ds = entry.*.value.v * dt;
+                const ds = entry.value.v * dt;
                 const dir = targetPos.minus(projectile.center());
                 const n = dir.norm();
                 if (n < ds) {
                     try self.engine.toDelete.set(id, {});
-                    switch (entry.*.value.damageType) {
+                    switch (entry.value.damageType) {
                         .direct => {
-                            switch (entry.*.value.navigation) {
+                            switch (entry.value.navigation) {
                                 .target => |targetId| {
                                     var target = try self.engine.healths.get(targetId);
-                                    target.*.health -= entry.*.value.damage;
+                                    target.health -= entry.value.damage;
                                 },
                                 else => {
                                     @panic("not implemented");
@@ -246,7 +246,7 @@ pub const Game = struct {
                             }
                         },
                         .splash => |splash| {
-                            try self.addSplashDamage(ticks, targetPos, splash.radius, entry.*.value.damage);
+                            try self.addSplashDamage(ticks, targetPos, splash.radius, entry.value.damage);
                         },
                     }
                 } else {
@@ -297,10 +297,10 @@ pub const Game = struct {
     fn updateDead(self: *Game) !void {
         // remove 0 health
         var it = self.engine.healths.iterator();
-        while (it.next()) |*entry| {
-            if (entry.*.value.health <= 0) {
-                try self.engine.toDelete.set(entry.*.id, {});
-                if (self.monsters.find(entry.*.id)) |monster| {
+        while (it.next()) |entry| {
+            if (entry.value.health <= 0) {
+                try self.engine.toDelete.set(entry.id, {});
+                if (self.monsters.find(entry.id)) |monster| {
                     self.money += monster.*.price;
                 }
             }

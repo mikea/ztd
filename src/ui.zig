@@ -42,8 +42,7 @@ pub const UI = struct {
     shadowId: Id,
     selId: Id,
 
-    selectedTowerId: ?Id = null,
-    selectedTower: ?*model.TowersTable.Entry = null,
+    selectedTower: ?model.TowersTable.Entry = null,
     towerPrototype: *const data.TowerData,
 
     pub fn init(allocator: std.mem.Allocator, g: *game.Game) !@This() {
@@ -124,11 +123,12 @@ pub const UI = struct {
                 self.towerPrototype = tower;
             },
             // todo: clean up upgrades
-            .UPGRADE_TOWER => |upgrade| if (self.selectedTower) |tower| {
-                if (self.game.money >= tower.value.upgradeCost) {
-                    self.game.money -= tower.value.upgradeCost;
-                    tower.value.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, tower.value.upgradeCost) * 1.1));
-                    const attacker = try self.game.attackers.get(tower.id);
+            .UPGRADE_TOWER => |upgrade| if (self.selectedTower) |towerEntry| {
+                const tower = towerEntry.value;
+                if (self.game.money >= tower.upgradeCost) {
+                    self.game.money -= tower.upgradeCost;
+                    tower.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, tower.upgradeCost) * 1.1));
+                    const attacker = try self.game.attackers.get(towerEntry.id);
 
                     switch (upgrade.attribute) {
                         .DAMAGE => attacker.*.damage = @round(attacker.*.damage * 1.2),
@@ -141,10 +141,10 @@ pub const UI = struct {
         }
     }
 
-    fn findTower(self: *@This(), pos: Vec) !?*model.TowersTable.Entry {
+    fn findTower(self: *@This(), pos: Vec) !?model.TowersTable.Entry {
         var towerFinder: struct {
             towers: *model.TowersTable,
-            tower: ?*model.TowersTable.Entry = null,
+            tower: ?model.TowersTable.Entry = null,
 
             pub fn callback(s: *@This(), id: Id, _: Rect) error{OutOfMemory}!void {
                 if (s.towers.findEntry(id)) |entry| {

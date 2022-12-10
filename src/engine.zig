@@ -137,7 +137,7 @@ pub const Engine = struct {
         // advance animation
         var it = self.animations.iterator();
         while (it.next()) |entry| {
-            const animation = &entry.value;
+            const animation = entry.value;
             switch (animation.*) {
                 .sprites => |*sprites| {
                     const i = (ticks / sprites.animationDelay + sprites.i) % sprites.coords.len;
@@ -163,17 +163,17 @@ pub const Engine = struct {
         try checkInt(sdl.c.SDL_RenderClear(self.renderer));
 
         for (model.Layers) |layer| {
-            for (self.sprites.sparse.dense.items) |*entry| {
-                const sprite = entry.*.value;
+            for (self.sprites.sparse.values.items) |*sprite, i| {
                 if (layer != sprite.z) {
                     continue;
                 }
-                const rect = try self.bounds.get(entry.*.id);
+                const id = self.sprites.sparse.ids.items[i];
+                const rect = try self.bounds.get(id);
                 if (self.viewport.view.intersects(rect)) {
                     const destRect = self.viewport.toScreen(rect);
                     try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.c.SDL_FLIP_NONE));
 
-                    if (self.healths.find(entry.*.id)) |health| {
+                    if (self.healths.find(id)) |health| {
                         if (health.*.health < health.*.maxHealth) {
                             // display health underneath the main sprite
                             const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
@@ -193,8 +193,8 @@ pub const Engine = struct {
 
     fn renderText(self: *Engine) !void {
         var it = self.texts.iterator();
-        while (it.next()) |*entry| {
-            var text = &entry.*.value;
+        while (it.next()) |entry| {
+            var text = entry.value;
 
             if (text.texture == null) {
                 text.texture = try checkNotNull(sdl.c.SDL_Texture, sdl.c.SDL_CreateTextureFromSurface(self.renderer, text.surface));
@@ -244,8 +244,8 @@ const Viewport = struct {
     scale: f32,
 
     pub fn init(displaySize: Vec) Viewport {
-        // initially 1000 wide, centered on origin
-        const w = 1000;
+        // initially 500 wide, centered on origin
+        const w = 500;
         const h = w * displaySize.y / displaySize.x;
         const view = Rect{ .a = .{ .x = -w / 2, .y = -h / 2 }, .b = .{ .x = w / 2, .y = h / 2 } };
         const screen = Rect.initSized(.{ .x = 0, .y = 0 }, displaySize);

@@ -10,7 +10,7 @@ const sdl = @import("sdl.zig");
 const data = @import("data.zig");
 
 pub fn initLevel1(game: *Game, allocator: std.mem.Allocator) !void {
-    try game.addTower(.{ .x = 0, .y = 0 }, &data.MagicTower);
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
 
     const points = try allocator.alloc(Vec, 20000);
     defer allocator.free(points);
@@ -44,11 +44,11 @@ pub fn initLevel1(game: *Game, allocator: std.mem.Allocator) !void {
         try game.addMonster(last, &data.RedMonster);
 
         var curDist: f32 = dist;
-        var m: usize = 0;
-        while (i < points.len) {
+        var m: usize = 1;
+        while (m < 100000) {
             const p = points[i];
 
-            while (curDist < p.dist(last)) {
+            while (curDist < p.dist(last) and m < 100000) {
                 const delta = last.dir(p).scale(curDist);
                 const next = last.add(delta);
                 try game.addMonster(next, switch (m % 10) {

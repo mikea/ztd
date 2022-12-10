@@ -15,34 +15,46 @@ pub fn SparseSet(
     return struct {
         pub const Entry = struct {
             id: I,
-            value: T,
+            value: *T,
         };
 
-        const DenseList = std.ArrayList(Entry);
         const ThisSparseSet = @This();
 
         allocator: std.mem.Allocator,
-        dense: DenseList,
+        ids: std.ArrayList(I),
+        values: std.ArrayList(T),
         sparse: []I,
         version: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) !@This() {
-            const sparse = try allocator.alloc(I, maxI + 1);
-            return .{ .allocator = allocator, .dense = DenseList.init(allocator), .sparse = sparse };
+            return .{
+                .allocator = allocator,
+                .ids = std.ArrayList(I).init(allocator),
+                .values = std.ArrayList(T).init(allocator),
+                .sparse = try allocator.alloc(I, maxI + 1),
+            };
         }
 
         pub fn deinit(self: *@This()) void {
             self.allocator.free(self.sparse);
-            self.dense.deinit();
+            self.ids.deinit();
+            self.values.deinit();
         }
 
-        pub fn find(self: *@This(), i: I) ?*Entry {
+        pub fn find(self: *@This(), i: I) ?*T {
             const denseIdx = self.sparse[i];
-            if (denseIdx >= self.dense.items.len) {
-                return null;
+            if (denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i) {
+                return &self.values.items[denseIdx];
             }
-            const entry = &self.dense.items[denseIdx];
-            return if (entry.id == i) entry else null;
+            return null;
+        }
+
+        pub fn findEntry(self: *@This(), i: I) ?Entry {
+            const denseIdx = self.sparse[i];
+            if (denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i) {
+                return .{ .id = i, .value = &self.values.items[denseIdx] };
+            }
+            return null;
         }
 
         pub fn contains(self: *@This(), i: I) bool {
@@ -55,15 +67,17 @@ pub fn SparseSet(
 
         // returns true if insert happens, false otherwise
         pub fn insertOrUpdate(self: *@This(), i: I, t: T) !bool {
-            if (self.find(i)) |entry| {
-                entry.value = t;
+            const denseIdx = self.sparse[i];
+            if (denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i) {
+                self.values.items[denseIdx] = t;
                 return false;
+            } else {
+                const idx = @intCast(I, self.ids.items.len);
+                try self.ids.append(i);
+                try self.values.append(t);
+                self.sparse[i] = idx;
+                return true;
             }
-
-            const denseIdx = @intCast(I, self.dense.items.len);
-            try self.dense.append(.{ .id = i, .value = t });
-            self.sparse[i] = denseIdx;
-            return true;
         }
 
         pub const Iterator = struct {
@@ -71,14 +85,15 @@ pub fn SparseSet(
             i: usize,
             v: usize,
 
-            pub fn next(self: *@This()) ?*Entry {
+            pub fn next(self: *@This()) ?Entry {
                 if (self.v != self.l.version) {
                     @panic("list was modified, not implemented");
                 }
-                if (self.i >= self.l.dense.items.len) return null;
-                const result = &self.l.dense.items[self.i];
+                if (self.i >= self.l.ids.items.len) return null;
+                const id = self.l.ids.items[self.i];
+                const value = &self.l.values.items[self.i];
                 self.i += 1;
-                return result;
+                return .{ .id = id, .value = value };
             }
         };
 
@@ -87,10 +102,10 @@ pub fn SparseSet(
         }
 
         pub fn get(self: *@This(), i: I) !*T {
-            if (self.find(i)) |entry| {
-                return &entry.value;
+            const denseIdx = self.sparse[i];
+            if (denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i) {
+                return &self.values.items[denseIdx];
             }
-            // @panic("row not found");
             return Error.RowNotFound;
         }
 
@@ -102,22 +117,26 @@ pub fn SparseSet(
 
             const denseIdx = self.sparse[i];
             const n = self.size();
-            const last = self.dense.pop();
+
+            const lastValue = self.values.pop();
+            const lastId = self.ids.pop();
 
             if (denseIdx == n - 1) {
                 return;
             }
 
-            self.dense.items[denseIdx] = last;
-            self.sparse[last.id] = self.sparse[i];
+            self.values.items[denseIdx] = lastValue;
+            self.ids.items[denseIdx] = lastId;
+            self.sparse[lastId] = self.sparse[i];
         }
 
         pub fn size(self: *const @This()) usize {
-            return self.dense.items.len;
+            return self.ids.items.len;
         }
 
         pub fn clear(self: *@This()) void {
-            self.dense.clearAndFree();
+            self.ids.clearRetainingCapacity();
+            self.values.clearRetainingCapacity();
         }
     };
 }
@@ -170,22 +189,22 @@ test "sparse set" {
     try expect(0 == set.size());
     try expect(!set.contains(1024));
 
-    try set.add(1024, .{ .i = 10 });
+    try set.set(1024, .{ .i = 10 });
     try expect(1 == set.size());
     try expect(set.contains(1024));
     try expect(!set.contains(2048));
 
-    try set.add(2048, .{ .i = 11 });
-    try set.add(512, .{ .i = 9 });
-    try set.add(256, .{ .i = 8 });
-    try set.add(128, .{ .i = 7 });
-    try set.add(1, .{ .i = 0 });
-    try set.add(2, .{ .i = 1 });
-    try set.add(4, .{ .i = 2 });
-    try set.add(8, .{ .i = 3 });
-    try set.add(16, .{ .i = 4 });
-    try set.add(32, .{ .i = 5 });
-    try set.add(64, .{ .i = 6 });
+    try set.set(2048, .{ .i = 11 });
+    try set.set(512, .{ .i = 9 });
+    try set.set(256, .{ .i = 8 });
+    try set.set(128, .{ .i = 7 });
+    try set.set(1, .{ .i = 0 });
+    try set.set(2, .{ .i = 1 });
+    try set.set(4, .{ .i = 2 });
+    try set.set(8, .{ .i = 3 });
+    try set.set(16, .{ .i = 4 });
+    try set.set(32, .{ .i = 5 });
+    try set.set(64, .{ .i = 6 });
 
     try expectSet(&set, &[_]u16{ 1024, 2048, 512, 256, 128, 1, 2, 4, 8, 16, 32, 64 }, &[_]i32{ 10, 11, 9, 8, 7, 0, 1, 2, 3, 4, 5, 6 });
 

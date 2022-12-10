@@ -30,14 +30,11 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
         }
 
         pub fn find(self: *@This(), id: Id) ?*T {
-            if (self.sparse.find(id)) |*entry| {
-                return &entry.*.value;
-            }
-            return null;
+            return self.sparse.find(id);
         }
 
-        pub fn findEntry(self: *@This(), id: Id) ?*Entry {
-            return self.sparse.find(id);
+        pub fn findEntry(self: *@This(), id: Id) ?Entry {
+            return self.sparse.findEntry(id);
         }
 
         pub fn get(self: *@This(), id: Id) !*T {
