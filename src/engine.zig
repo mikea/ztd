@@ -169,7 +169,7 @@ pub const Engine = struct {
         try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
         try checkInt(sdl.c.SDL_RenderClear(self.renderer));
 
-        for (model.Layers) |layer| {
+        for (std.enums.values(model.Layer)) |layer| {
             for (self.sprites.sparse.values.items) |*sprite, i| {
                 if (layer != sprite.z) {
                     continue;

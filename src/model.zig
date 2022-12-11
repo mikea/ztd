@@ -94,12 +94,13 @@ pub const Layer = enum {
     UI,
 };
 
-// todo: use metaprogramming
-pub const Layers = [_]Layer{ .SPLASH_DAMAGE, .MONSTER, .TOWER, .DAMAGE, .PROJECTILE, .UI };
-
 pub const Sprite = struct {
     texture: *sdl.c.SDL_Texture,
     src: sdl.c.SDL_Rect,
     angle: f64,
     z: Layer,
+};
+
+pub const Particle = struct {
+
 };
