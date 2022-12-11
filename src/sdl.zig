@@ -1,15 +1,11 @@
 const std = @import("std");
-
 const model = @import("model.zig");
+const cairo = @import("cairo.zig");
 
 pub const c = @cImport({
     @cInclude("SDL.h");
     @cInclude("SDL_image.h");
     @cInclude("SDL_ttf.h");
-});
-
-const cairo = @cImport({
-    @cInclude("cairo.h");
 });
 
 pub const Renderer = c.SDL_Renderer;
@@ -57,6 +53,22 @@ pub const SpriteSheet = struct {
     }
 };
 
+pub const Texture = struct { texture: *c.SDL_Texture, w: i32, h: i32 };
+
+pub fn renderText(
+    renderer: *c.SDL_Renderer,
+    text: [:0]const u8,
+    font: *c.TTF_Font,
+    color: c.SDL_Color,
+) !Texture {
+    const surface = c.TTF_RenderText_Solid_Wrapped(font, @as([*:0]const u8, text), color, 0);
+    defer c.SDL_FreeSurface(surface);
+    const w = surface.*.w;
+    const h = surface.*.h;
+    const texture = try checkNotNull(c.SDL_Texture, c.SDL_CreateTextureFromSurface(renderer, surface));
+    return .{ .texture = texture, .w = w, .h = h };
+}
+
 pub fn drawCircle(
     renderer: *c.SDL_Renderer,
     r: f32,
@@ -65,7 +77,7 @@ pub fn drawCircle(
         stroke: struct { w: f64 },
         fill: void,
     },
-) !struct { texture: *c.SDL_Texture, w: i32, h: i32 } {
+) !Texture {
     const w = r * 2 + 1;
     const wint = @floatToInt(i32, w);
     const texture = try checkNotNull(c.SDL_Texture, c.SDL_CreateTexture(renderer, c.SDL_PIXELFORMAT_ARGB8888, c.SDL_TEXTUREACCESS_STREAMING, wint, wint));
@@ -73,22 +85,22 @@ pub fn drawCircle(
     var pixels: [*c]u8 = undefined;
     try checkInt(c.SDL_LockTexture(texture, null, @ptrCast([*c]?*anyopaque, &pixels), &pitch));
 
-    const cairoSurface = cairo.cairo_image_surface_create_for_data(pixels, cairo.CAIRO_FORMAT_ARGB32, wint, wint, pitch);
-    const cr = cairo.cairo_create(cairoSurface);
+    const cairoSurface = cairo.c.cairo_image_surface_create_for_data(pixels, cairo.c.CAIRO_FORMAT_ARGB32, wint, wint, pitch);
+    const cr = cairo.c.cairo_create(cairoSurface);
 
-    cairo.cairo_set_source_rgba(cr, 1, 1, 1, 0);
-    cairo.cairo_rectangle(cr, 0, 0, w, w);
-    cairo.cairo_fill(cr);
+    cairo.c.cairo_set_source_rgba(cr, 1, 1, 1, 0);
+    cairo.c.cairo_rectangle(cr, 0, 0, w, w);
+    cairo.c.cairo_fill(cr);
 
-    cairo.cairo_set_source_rgba(cr, color.r, color.g, color.b, color.a);
-    cairo.cairo_arc(cr, w / 2, w / 2, r, 0, 2 * std.math.pi);
+    cairo.c.cairo_set_source_rgba(cr, color.r, color.g, color.b, color.a);
+    cairo.c.cairo_arc(cr, w / 2, w / 2, r, 0, 2 * std.math.pi);
     switch (style) {
         .stroke => |stroke| {
-            cairo.cairo_set_line_width(cr, stroke.w);
-            cairo.cairo_stroke(cr);
+            cairo.c.cairo_set_line_width(cr, stroke.w);
+            cairo.c.cairo_stroke(cr);
         },
         .fill => {
-            cairo.cairo_fill(cr);
+            cairo.c.cairo_fill(cr);
         },
     }
 

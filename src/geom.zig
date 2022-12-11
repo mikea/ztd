@@ -4,6 +4,10 @@ pub const Vec = struct {
     x: f32,
     y: f32,
 
+    pub fn initInt(x: i32, y: i32) Vec {
+        return .{ .x = @intToFloat(f32, x), .y = @intToFloat(f32, y) };
+    }
+
     pub fn add(a: Vec, b: Vec) Vec {
         return .{ .x = a.x + b.x, .y = a.y + b.y };
     }

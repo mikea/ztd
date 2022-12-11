@@ -108,7 +108,7 @@ pub const ArcherTower = TowerData{
     .attack = .{
         .range = 100,
         .attackDelayMs = 200,
-        .damage = 90,
+        .damage = 100,
         .attackType = .{ .projectile = .{ .damageType = .direct, .speed = 150, .navigation = .FOLLOW, .sheet = resources.SpriteSheets.LONG_ARROW } },
     },
     .health = .{ .maxHealth = 100, .health = 100 },

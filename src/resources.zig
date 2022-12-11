@@ -21,6 +21,7 @@ pub const Resources = struct {
 
     sheets: [sheetSize]sdl.SpriteSheet,
     rubik20: *sdl.c.TTF_Font,
+    rubik8: *sdl.c.TTF_Font,
 
     pub fn init(renderer: *sdl.Renderer, ) !Resources {
         var sheets: [sheetSize]sdl.SpriteSheet = undefined;
@@ -30,6 +31,7 @@ pub const Resources = struct {
         return .{
             .sheets = sheets,
             .rubik20 = try checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
+            .rubik8 = try checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 8)),
         };
     }
 
@@ -38,6 +40,7 @@ pub const Resources = struct {
             sheet.deinit();
         }
         sdl.c.TTF_CloseFont(self.rubik20);
+        sdl.c.TTF_CloseFont(self.rubik8);
     }
 
     pub fn getSheet(self: *@This(), sheet: SpriteSheets) *const sdl.SpriteSheet {

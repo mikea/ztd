@@ -5,7 +5,6 @@ const resources = @import("resources.zig");
 const data = @import("data.zig");
 const ui = @import("ui.zig");
 
-
 const table = @import("table.zig");
 const Table = table.Table;
 
@@ -210,7 +209,7 @@ pub const Game = struct {
         }
     }
 
-    fn updateProjectiles(self: *Game, ticks: u32) !void {
+    fn updateProjectiles(self: *Game, ticks: u32, frameAllocator: std.mem.Allocator) !void {
         {
             // move projectiles
             const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
@@ -237,16 +236,15 @@ pub const Game = struct {
                         .direct => {
                             switch (entry.value.navigation) {
                                 .target => |targetId| {
-                                    var target = try self.engine.healths.get(targetId);
-                                    target.health -= entry.value.damage;
+                                    try self.addDamage(targetId, entry.value.damage, ticks, frameAllocator);
                                 },
                                 else => {
-                                    @panic("not implemented");
+                                    @panic("splash damage without projectile not implemented");
                                 },
                             }
                         },
                         .splash => |splash| {
-                            try self.addSplashDamage(ticks, targetPos, splash.radius, entry.value.damage);
+                            try self.addSplashDamage(ticks, targetPos, splash.radius, entry.value.damage, frameAllocator);
                         },
                     }
                 } else {
@@ -258,11 +256,11 @@ pub const Game = struct {
         }
     }
 
-    fn addSplashDamage(self: *Game, ticks: usize, pos: Vec, radius: f32, damage: f32) !void {
+    fn addSplashDamage(self: *Game, ticks: usize, pos: Vec, radius: f32, damage: f32, frameAllocator: std.mem.Allocator) !void {
         const i = self.engine.ids.nextId();
         try self.engine.bounds.set(i, Rect.initCentered(pos.x, pos.y, radius * 2, radius * 2));
-        const c = try sdl.drawCircle(self.engine.renderer, radius, .{.r=1, .g=0, .b=0, .a=0.5}, .fill);
-        try self.engine.sprites.set(i, .{.texture = c.texture, .src = .{.x = 0, .y = 0, .w = c.w, .h = c.h}, .angle = 0, .z = .SPLASH_DAMAGE});
+        const c = try sdl.drawCircle(self.engine.renderer, radius, .{ .r = 1, .g = 0, .b = 0, .a = 0.5 }, .fill);
+        try self.engine.sprites.set(i, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angle = 0, .z = .SPLASH_DAMAGE });
         try self.engine.animations.set(i, .{
             .timed = .{ .endTicks = ticks + 300, .onComplete = .FREE_TEXTURE },
         });
@@ -271,27 +269,51 @@ pub const Game = struct {
             pos: Vec,
             radius: f32,
             damage: f32,
-            monsters: *model.MonstersTable,
-            healths: *model.HealthsTable,
+            game: *Game,
+            monsters: std.ArrayList(Id),
 
             pub fn callback(s: *@This(), id: Id, r: Rect) error{OutOfMemory}!void {
                 if (r.center().dist(s.pos) > s.radius) return;
 
-                if (s.monsters.find(id) != null) {
-                    if (s.healths.find(id)) |*h| {
-                        h.*.health -= s.damage;
+                if (s.game.monsters.find(id) != null) {
+                    if (s.game.engine.healths.find(id) != null) {
+                        try s.monsters.append(id);
                     }
                 }
             }
         } = .{
-            .monsters = &self.monsters,
-            .healths = &self.engine.healths,
+            .game = self,
             .pos = pos,
             .radius = radius,
             .damage = damage,
+            .monsters = std.ArrayList(Id).init(frameAllocator),
         };
 
         try self.engine.bounds.findIntersect(Rect.initCentered(pos.x, pos.y, radius * 2, radius * 2), @TypeOf(processor), &processor, @TypeOf(processor).callback);
+        for (processor.monsters.items) |id| {
+            try self.addDamage(id, damage, ticks, frameAllocator);
+        }
+    }
+
+    fn addDamage(self: *Game, id: Id, damage: f32, ticks: usize, frameAllocator: std.mem.Allocator) !void {
+        if (self.engine.healths.find(id)) |*health| {
+            health.*.health -= damage;
+
+            const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(i64, damage)});
+            const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik20, .{ .r = 255, .g = 0, .b = 0, .a = 255 });
+            const bounds = try self.engine.bounds.get(id);
+            const pos = bounds.center();
+            const damageId = self.engine.ids.nextId();
+
+            try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w >> 3, texture.h >> 3)));
+            try self.engine.sprites.set(damageId, .{
+                .texture = texture.texture,
+                .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
+                .angle = 0,
+                .z = .DAMAGE,
+            });
+            try self.engine.animations.set(damageId, .{.timed = .{.endTicks = ticks + 300, .onComplete = .FREE_TEXTURE }});
+        }
     }
 
     fn updateDead(self: *Game) !void {
@@ -322,12 +344,11 @@ pub const Game = struct {
             return;
         }
 
-
         try self.updateMonsters(ticks);
         try self.updateTowers();
         try self.updateAttackers(ticks);
 
-        try self.updateProjectiles(ticks);
+        try self.updateProjectiles(ticks, frameAllocator);
         try self.updateDeleted();
 
         try self.updateDead();

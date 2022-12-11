@@ -89,12 +89,13 @@ pub const Layer = enum {
     SPLASH_DAMAGE,
     MONSTER,
     TOWER,
+    DAMAGE,
     PROJECTILE,
     UI,
 };
 
 // todo: use metaprogramming
-pub const Layers = [_]Layer{ .SPLASH_DAMAGE, .MONSTER, .TOWER, .PROJECTILE, .UI };
+pub const Layers = [_]Layer{ .SPLASH_DAMAGE, .MONSTER, .TOWER, .DAMAGE, .PROJECTILE, .UI };
 
 pub const Sprite = struct {
     texture: *sdl.c.SDL_Texture,
