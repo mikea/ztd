@@ -67,6 +67,7 @@ pub const Engine = struct {
     sprites: SpritesTable,
     animations: AnimationsTable,
     healths: model.HealthsTable,
+    particles: model.ParticlesTable,
 
     ids: IdManager = .{},
     running: bool = true,
@@ -82,13 +83,14 @@ pub const Engine = struct {
 
         return .{
             .renderer = renderer,
+            .viewport = Viewport.init(displaySize),
             .toDelete = try SparseSet(Id, maxId, void).init(allocator),
             .bounds = try BoundsTable.init(allocator),
             .texts = try TextsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
             .animations = try AnimationsTable.init(allocator),
             .healths = try model.HealthsTable.init(allocator),
-            .viewport = Viewport.init(displaySize),
+            .particles = try model.ParticlesTable.init(allocator),
         };
     }
 
@@ -98,6 +100,7 @@ pub const Engine = struct {
         self.sprites.deinit();
         self.animations.deinit();
         self.healths.deinit();
+        self.particles.deinit();
         self.toDelete.deinit();
     }
 
@@ -107,6 +110,7 @@ pub const Engine = struct {
         try self.sprites.delete(id);
         try self.animations.delete(id);
         try self.healths.delete(id);
+        try self.particles.delete(id);
     }
 
     pub fn nextEvent(self: *Engine) ?sdl.c.SDL_Event {
@@ -133,7 +137,7 @@ pub const Engine = struct {
         return null;
     }
 
-    pub fn updateAnimations(self: *Engine, ticks: u32) !void {
+    pub fn updateAnimations(self: *Engine, ticks: usize) !void {
         // advance animation
         var it = self.animations.iterator();
         while (it.next()) |entry| {
@@ -152,11 +156,24 @@ pub const Engine = struct {
                             .FREE_TEXTURE => {
                                 const sprite = try self.sprites.get(entry.id);
                                 sdl.c.SDL_DestroyTexture(sprite.texture);
-                            }
+                            },
                         }
                     }
                 },
             }
+        }
+    }
+
+    pub fn updateParticles(self: *Engine, ticks: usize, dt: f32) !void {
+        var it = self.particles.iterator();
+        while (it.next()) |entry| {
+            const particle = entry.value;
+            if (ticks >= particle.endTicks) {
+                try self.toDelete.set(entry.id, {});
+                continue;
+            }
+            const bound = try self.bounds.get(entry.id);
+            try self.bounds.update(entry.id, bound.translate(particle.v.scale(dt)));
         }
     }
 
@@ -251,8 +268,8 @@ const Viewport = struct {
     scale: f32,
 
     pub fn init(displaySize: Vec) Viewport {
-        // initially 500 wide, centered on origin
-        const w = 500;
+        // initially 1000 wide, centered on origin
+        const w = 1000;
         const h = w * displaySize.y / displaySize.x;
         const view = Rect{ .a = .{ .x = -w / 2, .y = -h / 2 }, .b = .{ .x = w / 2, .y = h / 2 } };
         const screen = Rect.initSized(.{ .x = 0, .y = 0 }, displaySize);

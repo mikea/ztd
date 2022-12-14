@@ -128,9 +128,7 @@ pub const Game = struct {
         }
     }
 
-    fn updateMonsters(self: *Game, ticks: u32) !void {
-        const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
-
+    fn updateMonsters(self: *Game, dt: f32) !void {
         // move monsters
         var it = self.monsters.iterator();
         while (it.next()) |entry| {
@@ -300,19 +298,19 @@ pub const Game = struct {
             health.*.health -= damage;
 
             const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(i64, damage)});
-            const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik20, .{ .r = 255, .g = 0, .b = 0, .a = 255 });
+            const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 255, .g = 0, .b = 0, .a = 255 });
             const bounds = try self.engine.bounds.get(id);
             const pos = bounds.center();
             const damageId = self.engine.ids.nextId();
 
-            try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w >> 3, texture.h >> 3)));
+            try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w >> 1, texture.h >> 1)));
             try self.engine.sprites.set(damageId, .{
                 .texture = texture.texture,
                 .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
                 .angle = 0,
                 .z = .DAMAGE,
             });
-            try self.engine.animations.set(damageId, .{.timed = .{.endTicks = ticks + 300, .onComplete = .FREE_TEXTURE }});
+            try self.engine.particles.set(damageId, .{ .startTicks = ticks, .v = .{.x=0,.y=-20}, .endTicks = ticks + 400});
         }
     }
 
@@ -343,8 +341,9 @@ pub const Game = struct {
             self.lastTicks = ticks;
             return;
         }
+        const dt = 0.001 * @intToFloat(f32, ticks - self.lastTicks);
 
-        try self.updateMonsters(ticks);
+        try self.updateMonsters(dt);
         try self.updateTowers();
         try self.updateAttackers(ticks);
 
@@ -352,6 +351,9 @@ pub const Game = struct {
         try self.updateDeleted();
 
         try self.updateDead();
+        try self.updateDeleted();
+
+        try self.engine.updateParticles(ticks, dt);
         try self.updateDeleted();
 
         try self.engine.updateAnimations(ticks);

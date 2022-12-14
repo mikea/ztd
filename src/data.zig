@@ -30,7 +30,7 @@ pub const AnimationData = struct {
 
 pub const RedMonster = MonsterData{
     .size = .{ .x = 10, .y = 10 },
-    .monster = .{ .speed = 8, .price = 10 },
+    .monster = .{ .speed = 16, .price = 10 },
     .attack = .{ .range = 10, .damage = 5, .attackType = .direct, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 1000, .health = 1000 },
     .animations = .{
@@ -44,9 +44,9 @@ pub const RedMonster = MonsterData{
 };
 
 pub const Orc = MonsterData{
-    .size = .{ .x = 8, .y = 8 },
+    .size = .{ .x = 16, .y = 16 },
     .monster = .{ .speed = 10, .price = 1 },
-    .attack = .{ .range = 8, .damage = 2, .attackType = .direct, .attackDelayMs = 1000 },
+    .attack = .{ .range = 16, .damage = 2, .attackType = .direct, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 100, .health = 100 },
     .animations = .{
         .walk = .{ .delay = 150, .sheet = resources.SpriteSheets.ORC, .sprites = &[_]model.SpriteCoords{
@@ -59,7 +59,7 @@ pub const Orc = MonsterData{
 };
 
 pub const ArcherGoblin = MonsterData{
-    .size = .{ .x = 8, .y = 8 },
+    .size = .{ .x = 16, .y = 16 },
     .monster = .{ .speed = 12, .price = 1 },
     .attack = .{
         .range = 90,
@@ -84,7 +84,7 @@ pub const ArcherGoblin = MonsterData{
 };
 
 pub const MagicTower = TowerData{
-    .size = .{ .x = 8, .y = 8 },
+    .size = .{ .x = 16, .y = 16 },
     .tower = .{ .upgradeCost = 10, .name = "magic" },
     .attack = .{
         .range = 100,
@@ -103,7 +103,7 @@ pub const MagicTower = TowerData{
 };
 
 pub const ArcherTower = TowerData{
-    .size = .{ .x = 8, .y = 8 },
+    .size = .{ .x = 16, .y = 16 },
     .tower = .{ .upgradeCost = 10, .name = "archer" },
     .attack = .{
         .range = 100,
@@ -119,7 +119,7 @@ pub const ArcherTower = TowerData{
 pub const BuildTowers = [_]*const TowerData{ &ArcherTower, &MagicTower };
 
 pub const Keep = TowerData{
-    .size = .{ .x = 16, .y = 16 },
+    .size = .{ .x = 32, .y = 32 },
     .tower = .{
         .upgradeCost = 100,
         .name = "keep",

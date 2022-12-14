@@ -102,5 +102,8 @@ pub const Sprite = struct {
 };
 
 pub const Particle = struct {
-
+    v: Vec,
+    startTicks: usize,
+    endTicks: usize,
 };
+pub const ParticlesTable = table.Table(Id, maxId, Particle);
