@@ -44,6 +44,7 @@ pub const UI = struct {
 
     selectedTower: ?model.TowersTable.Entry = null,
     towerPrototype: *const data.TowerData,
+    towerSheet: *const sdl.SpriteSheet,
 
     pub fn init(allocator: std.mem.Allocator, g: *game.Game) !@This() {
         var result: @This() = .{
@@ -55,6 +56,7 @@ pub const UI = struct {
             .selId = g.engine.ids.nextId(),
             .menu = std.ArrayList(MenuItem).init(allocator),
             .towerPrototype = data.BuildTowers[0],
+            .towerSheet = g.resources.getSheet(data.BuildTowers[0].sheet),
         };
         try result.onAction(Action.CANCEL);
         return result;
@@ -74,9 +76,10 @@ pub const UI = struct {
                 }
             },
             sdl.c.SDL_MOUSEBUTTONDOWN => {
-                const pos = self.engine.mousePos.grid(8, 8);
+                const pos = self.engine.mousePos.grid(@intToFloat(f32, self.towerSheet.w), @intToFloat(f32, self.towerSheet.h));
 
                 switch (self.mode) {
+                    // todo: go through onAction
                     Mode.BUILD => if (self.game.money >= self.game.towerPrice and (try self.findTower(pos) == null)) {
                         try self.game.addTower(pos, self.towerPrototype);
                         self.game.money -= self.game.towerPrice;
@@ -91,6 +94,7 @@ pub const UI = struct {
                         try self.menu.append(.{ .text = "Upgrade Rate", .key = sdl.c.SDLK_3, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RATE } } });
 
                         try self.menu.append(.{ .text = "Cancel", .key = sdl.c.SDLK_ESCAPE, .action = .CANCEL });
+                        try self.menu.append(.{ .text = "Build", .key = sdl.c.SDLK_b, .action = .BUILD_MODE });
                     },
                 }
             },
@@ -103,6 +107,7 @@ pub const UI = struct {
             .BUILD_MODE => {
                 self.mode = Mode.BUILD;
                 self.towerPrototype = data.BuildTowers[0];
+                self.towerSheet = self.game.resources.getSheet(data.BuildTowers[0].sheet);
                 self.menu.clearAndFree();
                 for (data.BuildTowers) |tower, i| {
                     try self.menu.append(.{
@@ -121,8 +126,8 @@ pub const UI = struct {
             },
             .SET_TOWER_PROTOTYPE => |tower| {
                 self.towerPrototype = tower;
+                self.towerSheet = self.game.resources.getSheet(tower.sheet);
             },
-            // todo: clean up upgrades
             .UPGRADE_TOWER => |upgrade| if (self.selectedTower) |towerEntry| {
                 const tower = towerEntry.value;
                 if (self.game.money >= tower.upgradeCost) {
@@ -132,9 +137,9 @@ pub const UI = struct {
 
                     switch (upgrade.attribute) {
                         .DAMAGE => attacker.*.damage = @round(attacker.*.damage * 1.2),
-                        .RATE => attacker.*.attackDelayMs = @floatToInt(usize, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.2)),
-
-                        .RANGE => attacker.*.range = @round(attacker.*.range * 1.2),
+                        // todo: don't take money if at the limit
+                        .RATE => attacker.*.attackDelayMs = @floatToInt(usize, std.math.max(25, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.05))),
+                        .RANGE => attacker.*.range = @round(std.math.min(attacker.*.range, 200)),
                     }
                 }
             },
@@ -229,8 +234,10 @@ pub const UI = struct {
 
     fn updateBuildShadow(self: *@This()) !void {
         if (self.mode == Mode.BUILD) {
-            try self.engine.bounds.set(self.shadowId, Rect.centered(self.engine.mousePos.grid(8, 8), .{ .x = 8, .y = 8 }));
-            const sprite = self.resources.getSheet(self.towerPrototype.sheet).sprite(self.towerPrototype.sprite.x, self.towerPrototype.sprite.y, 0, .UI);
+            const towerPrototype = self.towerPrototype;
+            const pos = self.engine.mousePos.grid(@intToFloat(f32, self.towerSheet.w), @intToFloat(f32, self.towerSheet.h));
+            try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(self.towerSheet.w, self.towerSheet.h)));
+            const sprite = self.towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
             try self.engine.sprites.set(self.shadowId, sprite);
         } else {
             try self.engine.bounds.delete(self.shadowId);

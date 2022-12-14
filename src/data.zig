@@ -29,7 +29,7 @@ pub const AnimationData = struct {
 };
 
 pub const RedMonster = MonsterData{
-    .size = .{ .x = 10, .y = 10 },
+    .size = .{ .x = 24, .y = 24 },
     .monster = .{ .speed = 16, .price = 10 },
     .attack = .{ .range = 10, .damage = 5, .attackType = .direct, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 1000, .health = 1000 },

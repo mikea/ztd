@@ -94,8 +94,12 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
             return (try self.sparse.get(id)).*;
         }
 
-        pub fn find(self: *@This(), id: Id) ?Entry {
+        pub fn find(self: *@This(), id: Id) ?Rect {
             return (self.sparse.find(id) orelse return null).*;
+        }
+
+        pub fn findEntry(self: *@This(), id: Id) ?Entry {
+            return (self.sparse.findEntry(id) orelse return null).*;
         }
 
         pub fn delete(self: *@This(), id: Id) !void {

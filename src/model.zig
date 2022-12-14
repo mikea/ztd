@@ -11,6 +11,9 @@ pub const maxId: usize = 1 << 18;
 pub const Health = struct {
     maxHealth: f32,
     health: f32,
+
+    // damage that projectile will make when hit
+    futureDamage: f32 = 0,
 };
 pub const HealthsTable = table.Table(Id, maxId, Health);
 
@@ -33,17 +36,19 @@ pub const DamageType = union(enum) {
     },
 };
 
+pub const ProjectileAttack = struct {
+        speed: f32,
+        sheet: resources.SpriteSheets,
+        navigation: enum { POS, FOLLOW },
+        damageType: DamageType,
+    };
+
 pub const AttackType = union(enum) {
     direct: void,
     splash: struct {
         radius: f32,
     },
-    projectile: struct {
-        speed: f32,
-        sheet: resources.SpriteSheets,
-        navigation: enum { POS, FOLLOW },
-        damageType: DamageType,
-    },
+    projectile: ProjectileAttack,
 };
 
 pub const Attacker = struct {
