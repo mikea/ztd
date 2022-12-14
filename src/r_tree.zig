@@ -337,7 +337,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         }
 
         fn find(self: *@This(), id: Id) !*Node.Loc {
-            const loc = try self.locs.get(id);
+            const loc = self.locs.get(id);
             // std.debug.assert(loc.i < loc.node.len);
             // std.debug.assert(loc.node.items.leaf[loc.i].id == id);
             return loc;

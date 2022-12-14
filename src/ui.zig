@@ -133,7 +133,7 @@ pub const UI = struct {
                 if (self.game.money >= tower.upgradeCost) {
                     self.game.money -= tower.upgradeCost;
                     tower.upgradeCost = @floatToInt(usize, @round(@intToFloat(f32, tower.upgradeCost) * 1.1));
-                    const attacker = try self.game.attackers.get(towerEntry.id);
+                    const attacker = self.game.attackers.get(towerEntry.id);
 
                     switch (upgrade.attribute) {
                         .DAMAGE => attacker.*.damage = @round(attacker.*.damage * 1.2),
@@ -190,7 +190,7 @@ pub const UI = struct {
             Mode.SELECT => {
                 if (self.selectedTower) |tower| {
                     try writer.print("{s} Tower\n", .{tower.value.name});
-                    const attacker = try self.game.attackers.get(tower.id);
+                    const attacker = self.game.attackers.get(tower.id);
                     try writer.print("{} Damage\n", .{@floatToInt(usize, attacker.damage)});
                     try writer.print("{} Cooldown\n", .{attacker.attackDelayMs});
                     try writer.print("{} Range\n", .{@floatToInt(usize, attacker.range)});
@@ -216,8 +216,8 @@ pub const UI = struct {
             if (self.selectedTower) |selTower| {
                 if (self.game.towers.findEntry(selTower.id)) |towerEntry| {
                     self.selectedTower = towerEntry;
-                    const pos = (try self.engine.bounds.get(towerEntry.id)).center();
-                    const attacker = try self.game.attackers.get(towerEntry.id);
+                    const pos = (self.engine.bounds.get(towerEntry.id)).center();
+                    const attacker = self.game.attackers.get(towerEntry.id);
                     const range = attacker.range;
                     const c = try sdl.drawCircle(self.engine.renderer, range, .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 }, .{ .stroke = .{ .w = 0.5 } });
                     try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, c.w), @intToFloat(f32, c.h)));

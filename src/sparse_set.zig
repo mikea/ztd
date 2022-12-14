@@ -101,12 +101,12 @@ pub fn SparseSet(
             return .{ .l = self, .i = 0, .v = self.version };
         }
 
-        pub fn get(self: *@This(), i: I) !*T {
+        pub fn get(self: *@This(), i: I) *T {
             const denseIdx = self.sparse[i];
             if (denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i) {
                 return &self.values.items[denseIdx];
             }
-            return Error.RowNotFound;
+            @panic("row not found");
         }
 
         pub fn delete(self: *@This(), i: I) !void {

@@ -37,7 +37,7 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
             return self.sparse.findEntry(id);
         }
 
-        pub fn get(self: *@This(), id: Id) !*T {
+        pub fn get(self: *@This(), id: Id) *T {
             return self.sparse.get(id);
         }
 
@@ -90,8 +90,8 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
             }
         }
 
-        pub fn get(self: *@This(), id: Id) !Rect {
-            return (try self.sparse.get(id)).*;
+        pub fn get(self: *@This(), id: Id) Rect {
+            return (self.sparse.get(id)).*;
         }
 
         pub fn find(self: *@This(), id: Id) ?Rect {

@@ -154,7 +154,7 @@ pub const Engine = struct {
                         switch (timed.onComplete) {
                             .NOTHING => {},
                             .FREE_TEXTURE => {
-                                const sprite = try self.sprites.get(entry.id);
+                                const sprite = self.sprites.get(entry.id);
                                 sdl.c.SDL_DestroyTexture(sprite.texture);
                             },
                         }
@@ -172,7 +172,7 @@ pub const Engine = struct {
                 try self.toDelete.set(entry.id, {});
                 continue;
             }
-            const bound = try self.bounds.get(entry.id);
+            const bound = self.bounds.get(entry.id);
             try self.bounds.update(entry.id, bound.translate(particle.v.scale(dt)));
         }
     }
@@ -192,7 +192,7 @@ pub const Engine = struct {
                     continue;
                 }
                 const id = self.sprites.sparse.ids.items[i];
-                const rect = try self.bounds.get(id);
+                const rect = self.bounds.get(id);
                 if (self.viewport.view.intersects(rect)) {
                     const destRect = self.viewport.toScreen(rect);
                     try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.c.SDL_FLIP_NONE));
