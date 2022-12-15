@@ -17,6 +17,10 @@ const model = @import("model.zig");
 const Id = model.Id;
 const maxId = model.maxId;
 
+const RndGen = std.rand.DefaultPrng;
+
+var rnd = RndGen.init(0);
+
 pub const Game = struct {
     engine: *engine.Engine,
     resources: *resources.Resources,
@@ -221,9 +225,10 @@ pub const Game = struct {
             .POS => .{ .pos = target.center() },
             .FOLLOW => .{ .target = attacker.target },
         };
-        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage });
+        const sheet = self.resources.getSheet(projectile.sheet);
+        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.angleRad });
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
-        try self.engine.sprites.set(id, (self.resources.getSheet(projectile.sheet)).sprite(0, 0, 90, .PROJECTILE));
+        try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
     }
 
     fn updateProjectiles(self: *Game, ticks: usize, dt: f32, frameAllocator: std.mem.Allocator) !void {
@@ -266,7 +271,7 @@ pub const Game = struct {
                     const dn = dir.scale(ds / dist);
                     const newPos = projectile.translate(dn);
                     try self.engine.bounds.update(id, newPos);
-                    (self.engine.sprites.get(id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
+                    (self.engine.sprites.get(id)).angleRad = dir.angle() + entry.value.spriteAngleRad;
                 }
             }
         }
@@ -275,13 +280,25 @@ pub const Game = struct {
     }
 
     fn addSplashDamage(self: *Game, ticks: usize, pos: Vec, radius: f32, damage: f32, frameAllocator: std.mem.Allocator) !void {
-        const i = self.engine.ids.nextId();
-        try self.engine.bounds.set(i, Rect.initCentered(pos.x, pos.y, radius * 2, radius * 2));
-        const c = try sdl.drawCircle(self.engine.renderer, radius, .{ .r = 1, .g = 0, .b = 0, .a = 0.5 }, .fill);
-        try self.engine.sprites.set(i, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angle = 0, .z = .SPLASH_DAMAGE });
-        try self.engine.animations.set(i, .{
-            .timed = .{ .endTicks = ticks + 300, .onComplete = .FREE_TEXTURE },
-        });
+        // const c = try sdl.drawCircle(self.engine.renderer, radius, .{ .r = 1, .g = 0, .b = 0, .a = 0.5 }, .fill);
+        // try self.engine.sprites.set(i, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angle = 0, .z = .SPLASH_DAMAGE });
+        // try self.engine.animations.set(i, .{
+        //     .timed = .{ .endTicks = ticks + 300, .onComplete = .FREE_TEXTURE },
+        // });
+        {
+            const num = 50 + @floatToInt(u32, 20 * rnd.random().float(f32));
+            const duration = 150;
+            var i: u32 = 0;
+            while (i < num) {
+                const angle: f32 = 2 * std.math.pi * rnd.random().float(f32);
+                const id = self.engine.ids.nextId();
+                const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
+                try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, sheet.w) / 4, @intToFloat(f32, sheet.h) / 4));
+                try self.engine.sprites.set(id, .{ .texture = sheet.texture, .src = .{ .x = 0, .y = 0, .w = sheet.w, .h = sheet.h }, .angleRad = angle + sheet.angleRad, .z = .PROJECTILE });
+                try self.engine.particles.set(id, .{.v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration)), .startTicks = ticks, .endTicks = ticks + duration});
+                i += 1;
+            }
+        }
 
         var processor: struct {
             pos: Vec,
@@ -320,25 +337,23 @@ pub const Game = struct {
             health.*.futureDamage -= damage;
             std.debug.assert(health.futureDamage >= 0);
         }
-        std.log.debug("addDamage target={} health={}", .{ id, health });
-
         const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(i64, damage)});
-        const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 255, .g = 0, .b = 0, .a = 255 });
+        const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 179, .g = 14, .b = 8, .a = 255 });
         const bounds = self.engine.bounds.get(id);
         const pos = bounds.center();
         const damageId = self.engine.ids.nextId();
 
-        try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w >> 1, texture.h >> 1)));
+        try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w, texture.h).scale(0.75)));
         try self.engine.sprites.set(damageId, .{
             .texture = texture.texture,
             .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
-            .angle = 0,
+            .angleRad = 0,
             .z = .DAMAGE,
         });
         try self.engine.particles.set(damageId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -20 }, .endTicks = ticks + 400 });
     }
 
-    fn updateDead(self: *Game) !void {
+    fn updateDead(self: *Game, ticks: usize, frameAllocator: std.mem.Allocator) !void {
         // remove 0 health
         var it = self.engine.healths.iterator();
         while (it.next()) |entry| {
@@ -346,6 +361,21 @@ pub const Game = struct {
                 try self.engine.toDelete.set(entry.id, {});
                 if (self.monsters.find(entry.id)) |monster| {
                     self.money += monster.*.price;
+
+                    const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{monster.*.price});
+                    const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 255, .g = 215, .b = 0, .a = 255 });
+                    const bounds = self.engine.bounds.get(entry.id);
+                    const pos = bounds.center();
+                    const textId = self.engine.ids.nextId();
+
+                    try self.engine.bounds.set(textId, Rect.centered(pos, Vec.initInt(texture.w, texture.h)));
+                    try self.engine.sprites.set(textId, .{
+                        .texture = texture.texture,
+                        .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
+                        .angleRad = 0,
+                        .z = .DAMAGE,
+                    });
+                    try self.engine.particles.set(textId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -15 }, .endTicks = ticks + 600 });
                 }
             }
         }
@@ -372,7 +402,7 @@ pub const Game = struct {
         try self.updateTowers();
         try self.updateAttackers(ticks, frameAllocator);
         try self.updateProjectiles(ticks, dt, frameAllocator);
-        try self.updateDead();
+        try self.updateDead(ticks, frameAllocator);
 
         try self.engine.updateParticles(ticks, dt);
         try self.updateDeleted();

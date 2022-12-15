@@ -30,26 +30,27 @@ pub const SpriteSheet = struct {
     texture: *c.SDL_Texture,
     w: u16,
     h: u16,
+    angleRad: f32,
 
-    pub fn load(renderer: *c.SDL_Renderer, file: [*:0]const u8, w: u16, h: u16) !SpriteSheet {
+    pub fn load(renderer: *c.SDL_Renderer, file: [*:0]const u8, w: u16, h: u16, angle: f32) !SpriteSheet {
         const texture = checkNotNull(c.SDL_Texture, c.IMG_LoadTexture(renderer, file)) catch {
             std.log.err("failed to load {s}", .{file});
             return SdlError.ResourceError;
         };
-        return .{ .texture = texture, .w = w, .h = h };
+        return .{ .texture = texture, .w = w, .h = h, .angleRad = angle };
     }
 
     pub fn deinit(self: @This()) void {
         c.SDL_DestroyTexture(self.texture);
     }
 
-    pub fn sprite(self: *const @This(), x: u16, y: u16, angle: f64, z: model.Layer) model.Sprite {
+    pub fn sprite(self: *const @This(), x: u16, y: u16, angle: f32, z: model.Layer) model.Sprite {
         return .{ .texture = self.texture, .src = c.SDL_Rect{
             .x = x * self.w,
             .y = y * self.h,
             .w = self.w,
             .h = self.h,
-        }, .angle = angle, .z = z };
+        }, .angleRad = angle + self.angleRad, .z = z };
     }
 };
 

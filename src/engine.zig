@@ -195,7 +195,7 @@ pub const Engine = struct {
                 const rect = self.bounds.get(id);
                 if (self.viewport.view.intersects(rect)) {
                     const destRect = self.viewport.toScreen(rect);
-                    try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, sprite.angle, null, sdl.c.SDL_FLIP_NONE));
+                    try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, 360 * sprite.angleRad / (2 * std.math.pi), null, sdl.c.SDL_FLIP_NONE));
 
                     if (self.healths.find(id)) |health| {
                         if (health.*.health < health.*.maxHealth) {

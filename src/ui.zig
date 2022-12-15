@@ -221,7 +221,7 @@ pub const UI = struct {
                     const range = attacker.range;
                     const c = try sdl.drawCircle(self.engine.renderer, range, .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 }, .{ .stroke = .{ .w = 0.5 } });
                     try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, c.w), @intToFloat(f32, c.h)));
-                    try self.engine.sprites.set(self.selId, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angle = 0, .z = .UI });
+                    try self.engine.sprites.set(self.selId, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angleRad = 0, .z = .UI });
                     return;
                 }
             }

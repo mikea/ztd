@@ -87,6 +87,9 @@ pub const Projectile = struct {
     damage: f32,
     damageType: DamageType,
     navigation: Navigation,
+
+    // sprite initial angle
+    spriteAngleRad: f32,
 };
 pub const ProjectilesTable = table.Table(Id, maxId, Projectile);
 
@@ -102,7 +105,7 @@ pub const Layer = enum {
 pub const Sprite = struct {
     texture: *sdl.c.SDL_Texture,
     src: sdl.c.SDL_Rect,
-    angle: f64,
+    angleRad: f64,
     z: Layer,
 };
 

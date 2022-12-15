@@ -8,6 +8,10 @@ pub const Vec = struct {
         return .{ .x = @intToFloat(f32, x), .y = @intToFloat(f32, y) };
     }
 
+    pub fn initAngle(angleRad: f32) Vec {
+        return .{.x = std.math.cos(angleRad), .y = std.math.sin(angleRad)};
+    }
+
     pub fn add(a: Vec, b: Vec) Vec {
         return .{ .x = a.x + b.x, .y = a.y + b.y };
     }
