@@ -4,6 +4,7 @@ const sdl = @import("sdl.zig");
 const resources = @import("resources.zig");
 const data = @import("data.zig");
 const ui = @import("ui.zig");
+const builtin = @import("builtin");
 
 const table = @import("table.zig");
 const Table = table.Table;
@@ -21,6 +22,7 @@ pub const Game = struct {
     resources: *resources.Resources,
 
     lastTicks: usize = 0,
+    frame: usize = 0,
 
     attackers: model.AttackersTable,
     projectiles: model.ProjectilesTable,
@@ -188,6 +190,10 @@ pub const Game = struct {
                 continue;
             }
 
+            {
+                std.log.debug("attack: {} attacker health={}", .{ entry, self.engine.healths.get(entry.id) });
+            }
+
             attacker.*.lastAttack = ticks;
             switch (attacker.attackType) {
                 .direct => {
@@ -204,15 +210,17 @@ pub const Game = struct {
     }
 
     fn addProjectile(self: *Game, attacker: *model.Attacker, pos: Vec) !void {
+        const projectile = attacker.attackType.projectile;
         const id = self.engine.ids.nextId();
         const target = self.engine.bounds.get(attacker.target);
         const health = self.engine.healths.get(attacker.target);
-        health.*.futureDamage += attacker.damage;
+        if (projectile.damageType == .direct) {
+            health.*.futureDamage += attacker.damage;
+        }
         const nav: model.Navigation = switch (attacker.attackType.projectile.navigation) {
             .POS => .{ .pos = target.center() },
             .FOLLOW => .{ .target = attacker.target },
         };
-        const projectile = attacker.attackType.projectile;
         try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage });
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
         try self.engine.sprites.set(id, (self.resources.getSheet(projectile.sheet)).sprite(0, 0, 90, .PROJECTILE));
@@ -236,8 +244,8 @@ pub const Game = struct {
 
                 const ds = entry.value.v * dt;
                 const dir = targetPos.minus(projectile.center());
-                const n = dir.norm();
-                if (n < ds) {
+                const dist = dir.norm();
+                if (dist < ds) {
                     try self.engine.toDelete.set(id, {});
                     switch (entry.value.damageType) {
                         .direct => {
@@ -255,8 +263,9 @@ pub const Game = struct {
                         },
                     }
                 } else {
-                    const dn = dir.scale(ds / n);
-                    try self.engine.bounds.update(id, projectile.translate(dn));
+                    const dn = dir.scale(ds / dist);
+                    const newPos = projectile.translate(dn);
+                    try self.engine.bounds.update(id, newPos);
                     (self.engine.sprites.get(id)).angle = dir.angle() * 360 / (2.0 * std.math.pi) - 90;
                 }
             }
@@ -311,6 +320,7 @@ pub const Game = struct {
             health.*.futureDamage -= damage;
             std.debug.assert(health.futureDamage >= 0);
         }
+        std.log.debug("addDamage target={} health={}", .{ id, health });
 
         const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(i64, damage)});
         const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 255, .g = 0, .b = 0, .a = 255 });
@@ -361,9 +371,7 @@ pub const Game = struct {
         try self.updateMonsters(dt);
         try self.updateTowers();
         try self.updateAttackers(ticks, frameAllocator);
-
         try self.updateProjectiles(ticks, dt, frameAllocator);
-
         try self.updateDead();
 
         try self.engine.updateParticles(ticks, dt);
@@ -383,8 +391,13 @@ pub const Game = struct {
 
         try self.ui.update(frameAllocator);
 
+        // if (builtin.mode == .Debug and self.frame % 100 == 0) {
+        //     self.engine.bounds.tree.checkConsistency();
+        // }
+
         self.lastTicks = ticks;
         self.towersUpdated = false;
+        self.frame += 1;
     }
 
     pub fn render(_: *Game) !void {}

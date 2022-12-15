@@ -116,6 +116,27 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             }
         }
 
+        pub fn checkConsistency(self: *const @This()) void {
+            switch (self.items) {
+                .leaf => |*entries| {
+                    for (entries[0..self.len]) |entry| {
+                        if (!self.rect.containsRect(entry.rect)) {
+                            std.log.err("inconsistent leaf entry: {} {}", .{self.rect, entry});
+                            @panic("inconsistent tree");
+                        }
+                    }
+                },
+                .middle => |children| {
+                    for (children[0..self.len]) |child| {
+                        if (!self.rect.containsRect(child.rect)) {
+                            @panic("inconsistent tree");
+                        }
+                        child.checkConsistency();
+                    }
+                }
+            }
+        }
+
         fn chooseLeaf(self: *This, rect: Rect) *This {
             var node = self;
             while (true) {
@@ -171,12 +192,12 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         pub fn findPoint(self: *const @This(), p: Vec, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
             switch (self.items) {
                 .leaf => |entries| for (entries[0..self.len]) |entry| {
-                    if (entry.rect.contains(p)) {
+                    if (entry.rect.containsVec(p)) {
                         try callback(callbackThis, entry.id, entry.rect);
                     }
                 },
                 .middle => |children| for (children[0..self.len]) |child| {
-                    if (child.rect.contains(p)) {
+                    if (child.rect.containsVec(p)) {
                         try child.findPoint(p, CallbackThis, callbackThis, callback);
                     }
                 },
@@ -313,7 +334,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
 
 
         pub fn findPoint(self: *const @This(), p: Vec, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
-            if (!self.root.rect.contains(p)) {
+            if (!self.root.rect.containsVec(p)) {
                 return;
             }
             try self.root.findPoint(p, CallbackThis, callbackThis, callback);
@@ -328,7 +349,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             const loc = try self.find(id);
             const entry = &loc.node.items.leaf[loc.i];
 
-            if (loc.node.rect.add(newRect).area() == loc.node.rect.area()) {
+            if (loc.node.rect.containsRect(newRect)) {
                 entry.rect = newRect;
             } else {
                 try loc.node.delete(loc.i, &self.locs);
@@ -341,6 +362,10 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             // std.debug.assert(loc.i < loc.node.len);
             // std.debug.assert(loc.node.items.leaf[loc.i].id == id);
             return loc;
+        }
+
+        pub fn checkConsistency(self: *@This()) void {
+            self.root.checkConsistency();
         }
 
         pub fn format(

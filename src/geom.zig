@@ -141,8 +141,12 @@ pub const Rect = struct {
         return self.b.y - self.a.y;
     }
 
-    pub fn contains(self: *const Rect, v: Vec) bool {
+    pub fn containsVec(self: *const Rect, v: Vec) bool {
         return v.x >= self.a.x and v.x <= self.b.x and v.y >= self.a.y and v.y <= self.b.y;
+    }
+
+    pub fn containsRect(self: *const Rect, r: Rect) bool {
+        return r.a.x >= self.a.x and r.a.y >= self.a.y and r.b.x <= self.b.x and r.b.y <= self.b.y;
     }
 
     // union is taken
