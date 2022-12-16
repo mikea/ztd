@@ -18,7 +18,6 @@ const Id = model.Id;
 const maxId = model.maxId;
 
 const RndGen = std.rand.DefaultPrng;
-
 var rnd = RndGen.init(0);
 
 pub const Game = struct {
@@ -192,10 +191,6 @@ pub const Game = struct {
             const d = pos.dist((self.engine.bounds.get(attacker.target)).center());
             if (d > attacker.range) {
                 continue;
-            }
-
-            {
-                std.log.debug("attack: {} attacker health={}", .{ entry, self.engine.healths.get(entry.id) });
             }
 
             attacker.*.lastAttack = ticks;

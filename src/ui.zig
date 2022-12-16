@@ -139,7 +139,7 @@ pub const UI = struct {
                         .DAMAGE => attacker.*.damage = @round(attacker.*.damage * 1.2),
                         // todo: don't take money if at the limit
                         .RATE => attacker.*.attackDelayMs = @floatToInt(usize, std.math.max(25, @round(@intToFloat(f32, attacker.*.attackDelayMs) / 1.05))),
-                        .RANGE => attacker.*.range = @round(std.math.min(attacker.*.range, 200)),
+                        .RANGE => attacker.*.range = @round(std.math.min(attacker.*.range * 1.05, 200)),
                     }
                 }
             },

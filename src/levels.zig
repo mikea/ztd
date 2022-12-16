@@ -9,7 +9,36 @@ const Game = @import("game.zig").Game;
 const sdl = @import("sdl.zig");
 const data = @import("data.zig");
 
-pub fn initLevel1(game: *Game, allocator: std.mem.Allocator) !void {
+const RndGen = std.rand.DefaultPrng;
+var rnd = RndGen.init(0);
+
+pub fn initLevel1(game: *Game) !void {
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
+
+    const firstCircleCount = 19;
+    const countIncrement = 49;
+    const circleCount = 64;
+    const unitDistance = 20;
+
+    var circle: usize = 0;
+    var count: usize = firstCircleCount;
+    while (circle < circleCount) {
+        const r = @intToFloat(f32, unitDistance * count) / (2 * std.math.pi);
+
+        var i:usize = 0;
+        while (i < count) {
+            const alpha = (2 * std.math.pi * @intToFloat(f32, i)) / @intToFloat(f32, count) + rnd.random().floatNorm(f32) / 10;
+            const pos = Vec.initAngle(alpha).scale(r + 5 * rnd.random().floatNorm(f32));
+            const unit = if (rnd.random().int(u32) % 100 == 0) &data.RedMonster else if (rnd.random().int(u32) % 10 == 0) &data.ArcherGoblin else &data.Orc;
+            try game.addMonster(pos, unit);
+            i += 1;
+        }
+        count += countIncrement;
+        circle += 1;
+    }
+}
+
+pub fn initLevel2(game: *Game, allocator: std.mem.Allocator) !void {
     try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
 
     const points = try allocator.alloc(Vec, 20000);

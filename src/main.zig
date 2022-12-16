@@ -95,11 +95,13 @@ pub fn main() !void {
     if (args.len >= 2) {
         if (std.mem.eql(u8, args[1], "stress1")) {
             try levels.initStress1(game);
+        } else if (std.mem.eql(u8, args[1], "level2")) {
+            try levels.initLevel2(game, allocator);
         } else {
-            try levels.initLevel1(game, allocator);
+            try levels.initLevel1(game);
         }
     } else {
-        try levels.initLevel1(game, allocator);
+        try levels.initLevel1(game);
     }
 
     var statistics = Statistics{ .engine = &eng, .resources = &resources };
