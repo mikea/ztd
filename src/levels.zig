@@ -25,7 +25,7 @@ pub fn initLevel1(game: *Game) !void {
     while (circle < circleCount) {
         const r = @intToFloat(f32, unitDistance * count) / (2 * std.math.pi);
 
-        var i:usize = 0;
+        var i: usize = 0;
         while (i < count) {
             const alpha = (2 * std.math.pi * @intToFloat(f32, i)) / @intToFloat(f32, count) + rnd.random().floatNorm(f32) / 10;
             const pos = Vec.initAngle(alpha).scale(r + 5 * rnd.random().floatNorm(f32));
@@ -81,7 +81,7 @@ pub fn initLevel2(game: *Game, allocator: std.mem.Allocator) !void {
                 const delta = last.dir(p).scale(curDist);
                 const next = last.add(delta);
                 try game.addMonster(next, switch (m % 10) {
-                    0,8 => &data.ArcherGoblin,
+                    0, 8 => &data.ArcherGoblin,
                     9 => &data.RedMonster,
                     else => &data.Orc,
                 });
@@ -100,30 +100,30 @@ pub fn initLevel2(game: *Game, allocator: std.mem.Allocator) !void {
 
 pub fn initStress1(game: *Game) !void {
     {
-        // init monsters
-        const grid = 200;
-        const step = 20;
+        // monsters
+        const dist: f32 = 20;
+        const size: usize = 500;
 
-        var i: i32 = -grid + 1;
-        while (i < grid) : (i += 1) {
-            var j: i32 = -grid + 1;
-            while (j < grid) : (j += 1) {
-                if (j < 5 and j > -5) {
-                    continue;
-                }
-                try game.addMonster(.{.x = @intToFloat(f32, i) * step, .y = @intToFloat(f32, j) * step}, &data.RedMonster);
+        var i: usize = 0;
+        while (i < size) {
+            var j: usize = 0;
+            while (j < size) {
+                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + dist, .y = @intToFloat(f32, j) * dist + dist }, &data.Orc);
+                j += 1;
             }
+
+            i += 1;
         }
     }
 
-    {
-        // init towers
-        var i: i32 = -5000;
-        while (i <= 5000) {
-            try game.addTower(.{ .x = @intToFloat(f32, i), .y = 0 }, &data.MagicTower);
-            i += 200;
-        }
-    }
+    // {
+    //     // init towers
+    //     var i: i32 = -5000;
+    //     while (i <= 5000) {
+    //         try game.addTower(.{ .x = @intToFloat(f32, i), .y = 0 }, &data.MagicTower);
+    //         i += 200;
+    //     }
+    // }
 
-    try game.addTower(.{ .x = 0, .y = 0 }, &data.Keep);
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
 }
