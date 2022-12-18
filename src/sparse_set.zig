@@ -24,7 +24,6 @@ pub fn SparseSet(
         ids: std.ArrayList(I),
         values: std.ArrayList(T),
         sparse: []I,
-        version: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) !@This() {
             return .{
@@ -83,12 +82,8 @@ pub fn SparseSet(
         pub const Iterator = struct {
             l: *ThisSparseSet,
             i: usize,
-            v: usize,
 
             pub fn next(self: *@This()) ?Entry {
-                if (self.v != self.l.version) {
-                    @panic("list was modified, not implemented");
-                }
                 if (self.i >= self.l.ids.items.len) return null;
                 const id = self.l.ids.items[self.i];
                 const value = &self.l.values.items[self.i];
@@ -98,7 +93,7 @@ pub fn SparseSet(
         };
 
         pub fn iterator(self: *@This()) Iterator {
-            return .{ .l = self, .i = 0, .v = self.version };
+            return .{ .l = self, .i = 0 };
         }
 
         pub fn get(self: *@This(), i: I) *T {
@@ -109,11 +104,10 @@ pub fn SparseSet(
             @panic("row not found");
         }
 
-        pub fn delete(self: *@This(), i: I) !void {
+        pub fn delete(self: *@This(), i: I) void {
             if (self.find(i) == null) {
                 return;
             }
-            self.version += 1;
 
             const denseIdx = self.sparse[i];
             const n = self.size();

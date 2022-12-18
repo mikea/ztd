@@ -4,6 +4,8 @@ pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
+    b.installBinFile("README.md", "README.md");
+
     const exe = b.addExecutable("ztd", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);

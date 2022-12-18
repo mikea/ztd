@@ -73,11 +73,15 @@ pub const Game = struct {
         try self.attackers.set(id, d.attack);
         try self.engine.healths.set(id, d.health);
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
+        const sheet = self.resources.getSheet(d.animations.walk.sheet);
+        const coords = d.animations.walk.sprites;
+        const i = rnd.random().int(usize) % d.animations.walk.sprites.len;
+        try self.engine.sprites.set(id, sheet.sprite(coords[i].x, coords[i].y, 0, .MONSTER));
         try self.engine.animations.set(id, .{
             .animationDelay = d.animations.walk.delay,
-            .i = id % d.animations.walk.sprites.len,
-            .sheet = self.resources.getSheet(d.animations.walk.sheet),
-            .coords = d.animations.walk.sprites,
+            .i = i,
+            .sheet = sheet,
+            .coords = coords,
             .z = .MONSTER,
         });
     }
@@ -186,8 +190,8 @@ pub const Game = struct {
                 continue;
             }
 
-            const d = pos.dist((self.engine.bounds.get(attacker.target)).center());
-            if (d > attacker.range) {
+            const d = pos.dist2((self.engine.bounds.get(attacker.target)).center());
+            if (d > attacker.range * attacker.range) {
                 continue;
             }
 

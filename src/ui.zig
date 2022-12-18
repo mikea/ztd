@@ -182,6 +182,7 @@ pub const UI = struct {
     }
 
     fn printStatus(self: *@This(), writer: anytype) !void {
+        try writer.print("monsters {}\n", .{self.game.monsters.size()});
         try writer.print("$ {}\n", .{self.game.money});
         switch (self.mode) {
             Mode.BUILD => {

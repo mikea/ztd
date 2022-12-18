@@ -35,17 +35,16 @@ const Statistics = struct {
         self.textId = self.engine.ids.nextId();
     }
 
-    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, game: *Game, updateDurationNs: u64, renderDuration: u64) !void {
+    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, game: *Game, updateDurationNs: u64, renderDurationNs: u64) !void {
         defer self.lastTicks = ticks;
         if (self.lastTicks == 0) {
             return;
         }
-        const text = try std.fmt.allocPrintZ(frameAllocator, "{d} fps\n{} monsters\n{d:.0} ms/update\n{e:.0} monsters/sec\n{d:.0} ms/render", .{
+        const text = try std.fmt.allocPrintZ(frameAllocator, "{d} fps\n{d:.0} ms/update\n{d:.0} ms/render\n{e:.1} monsters/sec", .{
             1000 / (ticks - self.lastTicks),
-            game.monsters.size(),
             @intToFloat(f64, updateDurationNs) / 1000000,
-            @intToFloat(f64, updateDurationNs) / @intToFloat(f64, game.monsters.size()),
-            @intToFloat(f64, renderDuration) / 1000000,
+            @intToFloat(f64, renderDurationNs) / 1000000,
+            @intToFloat(f64, game.monsters.size()) * 1000000000 / @intToFloat(f64, updateDurationNs + renderDurationNs),
         });
         try self.engine.setText(self.textId, text, .{ .x = self.engine.viewport.displaySize.x, .y = 0 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
     }
@@ -62,24 +61,24 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    try checkInt(sdl.c.SDL_Init(sdl.c.SDL_INIT_VIDEO));
+    checkInt(sdl.c.SDL_Init(sdl.c.SDL_INIT_VIDEO));
     defer {
         sdl.c.SDL_Quit();
         std.log.info("application done, exiting", .{});
     }
 
     var displayMode: sdl.c.SDL_DisplayMode = undefined;
-    try checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
+    checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
 
-    const window = try checkNotNull(sdl.c.SDL_Window, sdl.c.SDL_CreateWindow("ZTD", sdl.c.SDL_WINDOWPOS_UNDEFINED, sdl.c.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.c.SDL_WINDOW_SHOWN));
+    const window = checkNotNull(sdl.c.SDL_Window, sdl.c.SDL_CreateWindow("ZTD", sdl.c.SDL_WINDOWPOS_UNDEFINED, sdl.c.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.c.SDL_WINDOW_SHOWN));
     defer sdl.c.SDL_DestroyWindow(window);
 
-    try checkInt(sdl.c.SDL_SetWindowFullscreen(window, sdl.c.SDL_WINDOW_FULLSCREEN));
+    checkInt(sdl.c.SDL_SetWindowFullscreen(window, sdl.c.SDL_WINDOW_FULLSCREEN));
 
-    try checkInt(sdl.c.TTF_Init());
+    checkInt(sdl.c.TTF_Init());
     defer sdl.c.TTF_Quit();
 
-    var renderer = try checkNotNull(sdl.c.SDL_Renderer, sdl.c.SDL_CreateRenderer(window, -1, sdl.c.SDL_RENDERER_ACCELERATED));
+    var renderer = checkNotNull(sdl.c.SDL_Renderer, sdl.c.SDL_CreateRenderer(window, -1, sdl.c.SDL_RENDERER_ACCELERATED));
     defer sdl.c.SDL_DestroyRenderer(renderer);
 
     var resources = try Resources.init(renderer);

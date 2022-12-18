@@ -89,9 +89,9 @@ pub const Engine = struct {
 
     pub fn init(allocator: std.mem.Allocator, renderer: *sdl.Renderer) !Engine {
         var displayMode: sdl.c.SDL_DisplayMode = undefined;
-        try checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
+        checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
 
-        try checkInt(sdl.c.SDL_SetRenderDrawBlendMode(renderer, sdl.c.SDL_BLENDMODE_BLEND));
+        checkInt(sdl.c.SDL_SetRenderDrawBlendMode(renderer, sdl.c.SDL_BLENDMODE_BLEND));
 
         const displaySize = Vec{ .x = @intToFloat(f32, displayMode.w), .y = @intToFloat(f32, displayMode.h) };
 
@@ -155,14 +155,24 @@ pub const Engine = struct {
     }
 
     pub fn updateAnimations(self: *Engine, ticks: usize) !void {
-        // advance animation
-        var it = self.animations.iterator();
-        while (it.next()) |entry| {
-            const animation = entry.value;
-            const i = (ticks / animation.animationDelay + animation.i) % animation.coords.len;
-            const coords = animation.coords[i];
-            try self.sprites.set(entry.id, animation.sheet.sprite(coords.x, coords.y, 0, animation.z));
+        if (self.viewport.view.height() > 5000) {
+            // do not update animation when zoomed out too much
+            return;
         }
+
+        var updater: struct {
+            engine: *Engine,
+            ticks: usize,
+            pub fn callback(s: *@This(), id: Id, _: Rect) error{OutOfMemory}!void {
+                if (s.engine.animations.find(id)) |animation| {
+                    const i = (s.ticks / animation.animationDelay + animation.i) % animation.coords.len;
+                    const coords = animation.coords[i];
+                    try s.engine.sprites.set(id, animation.sheet.sprite(coords.x, coords.y, 0, animation.z));
+                }
+            }
+        } = .{ .engine = self, .ticks = ticks };
+
+        try self.bounds.findIntersect(self.viewport.view, @TypeOf(updater), &updater, @TypeOf(updater).callback);
     }
 
     pub fn updateParticles(self: *Engine, ticks: usize, dt: f32) !void {
@@ -191,35 +201,40 @@ pub const Engine = struct {
     }
 
     fn renderSprites(self: *Engine) !void {
-        try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
-        try checkInt(sdl.c.SDL_RenderClear(self.renderer));
+        checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
+        checkInt(sdl.c.SDL_RenderClear(self.renderer));
 
         for (std.enums.values(model.Layer)) |layer| {
-            for (self.sprites.sparse.values.items) |*sprite, i| {
-                if (layer != sprite.z) {
-                    continue;
-                }
-                const id = self.sprites.sparse.ids.items[i];
-                const rect = self.bounds.get(id);
-                if (self.viewport.view.intersects(rect)) {
-                    const destRect = self.viewport.toScreen(rect);
-                    try checkInt(sdl.c.SDL_RenderCopyEx(self.renderer, sprite.texture, &sprite.src, &destRect, 360 * sprite.angleRad / (2 * std.math.pi), null, sdl.c.SDL_FLIP_NONE));
+            var renderer: struct {
+                engine: *Engine,
+                z: model.Layer,
 
-                    if (self.healths.find(id)) |health| {
-                        if (health.*.health < health.*.maxHealth) {
-                            // display health underneath the main sprite
-                            const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
-                            const healthRect = Rect{
-                                .a = .{ .x = rect.a.x, .y = rect.b.y },
-                                .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1 },
-                            };
-                            const destHealthRect = self.viewport.toScreen(healthRect);
-                            try checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0, 255, 0, 255));
-                            try checkInt(sdl.c.SDL_RenderFillRect(self.renderer, &destHealthRect));
+                pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
+                    if (s.engine.sprites.find(id)) |sprite| {
+                        if (s.z != sprite.z) {
+                            return;
+                        }
+                        const destRect = s.engine.viewport.toScreen(rect);
+                        checkInt(sdl.c.SDL_RenderCopyEx(s.engine.renderer, sprite.texture, &sprite.src, &destRect, 360 * sprite.angleRad / (2 * std.math.pi), null, sdl.c.SDL_FLIP_NONE));
+
+                        if (s.engine.healths.find(id)) |health| {
+                            if (health.*.health < health.*.maxHealth) {
+                                // display health underneath the main sprite
+                                const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
+                                const healthRect = Rect{
+                                    .a = .{ .x = rect.a.x, .y = rect.b.y },
+                                    .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1 },
+                                };
+                                const destHealthRect = s.engine.viewport.toScreen(healthRect);
+                                checkInt(sdl.c.SDL_SetRenderDrawColor(s.engine.renderer, 0, 255, 0, 255));
+                                checkInt(sdl.c.SDL_RenderFillRect(s.engine.renderer, &destHealthRect));
+                            }
                         }
                     }
                 }
-            }
+            } = .{ .engine = self, .z = layer };
+
+            try self.bounds.findIntersect(self.viewport.view, @TypeOf(renderer), &renderer, @TypeOf(renderer).callback);
         }
     }
 
@@ -229,7 +244,7 @@ pub const Engine = struct {
             var text = entry.value;
 
             if (text.texture == null) {
-                text.texture = try checkNotNull(sdl.c.SDL_Texture, sdl.c.SDL_CreateTextureFromSurface(self.renderer, text.surface));
+                text.texture = checkNotNull(sdl.c.SDL_Texture, sdl.c.SDL_CreateTextureFromSurface(self.renderer, text.surface));
             }
 
             const srcRect: sdl.c.SDL_Rect = .{
@@ -245,7 +260,7 @@ pub const Engine = struct {
                 .h = text.surface.*.h,
             };
 
-            try checkInt(sdl.c.SDL_RenderCopy(self.renderer, text.texture, &srcRect, &dstRect));
+            checkInt(sdl.c.SDL_RenderCopy(self.renderer, text.texture, &srcRect, &dstRect));
         }
     }
 
@@ -335,6 +350,7 @@ const Viewport = struct {
             sdl.c.SDL_MOUSEWHEEL => {
                 const z: f32 = if (event.wheel.y > 0) mouseZoom else 1.0 / mouseZoom;
                 self.view = Rect.centered(self.view.center(), self.view.size().scale(z));
+                std.log.debug("height: {}", .{self.view.height()});
             },
             else => {},
         }

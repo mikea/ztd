@@ -59,7 +59,7 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
 pub fn RTable(comptime Id: type, comptime maxId: Id) type {
     return struct {
         const Set = SparseSet(Id, maxId, Rect);
-        const Tree = RTree(Id, maxId, 300, 100);
+        const Tree = RTree(Id, maxId, 2000, 2000);
 
         pub const Entry = Set.Entry;
         // pub const Iterator = Set.Iterator;

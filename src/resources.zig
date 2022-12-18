@@ -34,8 +34,8 @@ pub const Resources = struct {
         }
         return .{
             .sheets = sheets,
-            .rubik20 = try checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
-            .rubik8 = try checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 8)),
+            .rubik20 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
+            .rubik8 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 8)),
         };
     }
 

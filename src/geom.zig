@@ -138,7 +138,7 @@ pub const Rect = struct {
     }
 
     pub fn translate(self: *const Rect, v: Vec) Rect {
-        return .{ .a = self.a.add(v), .b = self.b.add(v) };
+        return .{ .a = .{.x = self.a.x + v.x, .y = self.a.y + v.y }, .b = .{.x = self.b.x + v.x, .y = self.b.y + v.y } };
     }
 
     pub fn height(self: *const Rect) f32 {

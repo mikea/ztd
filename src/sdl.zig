@@ -16,14 +16,14 @@ const SdlError = error{
     ResourceError,
 };
 
-pub fn checkInt(i: c_int) !void {
+pub fn checkInt(i: c_int) void {
     if (i < 0) {
-        return SdlError.SdlError;
+        @panic("SDL Error");
     }
 }
 
-pub fn checkNotNull(comptime T: type, ptr: ?*T) !*T {
-    return ptr orelse SdlError.SdlError;
+pub fn checkNotNull(comptime T: type, ptr: ?*T) *T {
+    return ptr orelse @panic("SDL Error");
 }
 
 pub const SpriteSheet = struct {
@@ -33,10 +33,7 @@ pub const SpriteSheet = struct {
     angleRad: f32,
 
     pub fn load(renderer: *c.SDL_Renderer, file: [*:0]const u8, w: u16, h: u16, angle: f32) !SpriteSheet {
-        const texture = checkNotNull(c.SDL_Texture, c.IMG_LoadTexture(renderer, file)) catch {
-            std.log.err("failed to load {s}", .{file});
-            return SdlError.ResourceError;
-        };
+        const texture = checkNotNull(c.SDL_Texture, c.IMG_LoadTexture(renderer, file));
         return .{ .texture = texture, .w = w, .h = h, .angleRad = angle };
     }
 
@@ -66,7 +63,7 @@ pub fn renderText(
     defer c.SDL_FreeSurface(surface);
     const w = surface.*.w;
     const h = surface.*.h;
-    const texture = try checkNotNull(c.SDL_Texture, c.SDL_CreateTextureFromSurface(renderer, surface));
+    const texture = checkNotNull(c.SDL_Texture, c.SDL_CreateTextureFromSurface(renderer, surface));
     return .{ .texture = texture, .w = w, .h = h };
 }
 
@@ -81,10 +78,10 @@ pub fn drawCircle(
 ) !Texture {
     const w = r * 2 + 1;
     const wint = @floatToInt(i32, w);
-    const texture = try checkNotNull(c.SDL_Texture, c.SDL_CreateTexture(renderer, c.SDL_PIXELFORMAT_ARGB8888, c.SDL_TEXTUREACCESS_STREAMING, wint, wint));
+    const texture = checkNotNull(c.SDL_Texture, c.SDL_CreateTexture(renderer, c.SDL_PIXELFORMAT_ARGB8888, c.SDL_TEXTUREACCESS_STREAMING, wint, wint));
     var pitch: c_int = undefined;
     var pixels: [*c]u8 = undefined;
-    try checkInt(c.SDL_LockTexture(texture, null, @ptrCast([*c]?*anyopaque, &pixels), &pitch));
+    checkInt(c.SDL_LockTexture(texture, null, @ptrCast([*c]?*anyopaque, &pixels), &pitch));
 
     const cairoSurface = cairo.c.cairo_image_surface_create_for_data(pixels, cairo.c.CAIRO_FORMAT_ARGB32, wint, wint, pitch);
     const cr = cairo.c.cairo_create(cairoSurface);
@@ -107,7 +104,7 @@ pub fn drawCircle(
 
     c.SDL_UnlockTexture(texture);
 
-    try checkInt(c.SDL_SetTextureBlendMode(texture, c.SDL_BLENDMODE_BLEND));
+    checkInt(c.SDL_SetTextureBlendMode(texture, c.SDL_BLENDMODE_BLEND));
 
     return .{ .texture = texture, .w = wint, .h = wint };
 }
