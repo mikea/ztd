@@ -17,17 +17,31 @@ const SparseSet = @import("sparse_set.zig").SparseSet;
 
 pub const IdManager = struct {
     i: Id = 0,
+    avail: SparseSet(Id, maxId, void),
+
+    pub fn init(allocator: std.mem.Allocator) !IdManager {
+        return .{ .avail = try SparseSet(Id, maxId, void).init(allocator) };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.avail.deinit();
+    }
 
     pub fn nextId(self: *@This()) Id {
         if (self.i == maxId) {
-            std.log.err("too many ids allocated: max={}", .{maxId});
-            @panic("too many ids");
-        } else if ((maxId - self.i) % 10000 == 0) {
-            std.log.debug("remainig {} ids", .{maxId - self.i});
+            if (self.avail.size() == 0) {
+                std.log.err("too many ids allocated: max={}", .{maxId});
+                @panic("too many ids");
+            }
+            return self.avail.pop();
         }
         // no id 0!
         self.i += 1;
         return self.i;
+    }
+
+    pub fn free(self: *@This(), id: Id) !void {
+        try self.avail.set(id, {});
     }
 };
 
@@ -69,7 +83,7 @@ pub const Engine = struct {
     healths: model.HealthsTable,
     particles: model.ParticlesTable,
 
-    ids: IdManager = .{},
+    ids: IdManager,
     running: bool = true,
     mousePos: Vec = .{ .x = 0, .y = 0 },
 
@@ -82,6 +96,7 @@ pub const Engine = struct {
         const displaySize = Vec{ .x = @intToFloat(f32, displayMode.w), .y = @intToFloat(f32, displayMode.h) };
 
         return .{
+            .ids = try IdManager.init(allocator),
             .renderer = renderer,
             .viewport = Viewport.init(displaySize),
             .toDelete = try SparseSet(Id, maxId, void).init(allocator),
@@ -102,6 +117,7 @@ pub const Engine = struct {
         self.healths.deinit();
         self.particles.deinit();
         self.toDelete.deinit();
+        self.ids.deinit();
     }
 
     pub fn delete(self: *Engine, id: Id) !void {
@@ -111,6 +127,7 @@ pub const Engine = struct {
         try self.animations.delete(id);
         try self.healths.delete(id);
         try self.particles.delete(id);
+        try self.ids.free(id);
     }
 
     pub fn nextEvent(self: *Engine) ?sdl.c.SDL_Event {
@@ -142,25 +159,9 @@ pub const Engine = struct {
         var it = self.animations.iterator();
         while (it.next()) |entry| {
             const animation = entry.value;
-            switch (animation.*) {
-                .sprites => |*sprites| {
-                    const i = (ticks / sprites.animationDelay + sprites.i) % sprites.coords.len;
-                    const coords = sprites.coords[i];
-                    try self.sprites.set(entry.id, sprites.sheet.sprite(coords.x, coords.y, 0, sprites.z));
-                },
-                .timed => |*timed| {
-                    if (ticks >= timed.*.endTicks) {
-                        try self.toDelete.set(entry.id, {});
-                        switch (timed.onComplete) {
-                            .NOTHING => {},
-                            .FREE_TEXTURE => {
-                                const sprite = self.sprites.get(entry.id);
-                                sdl.c.SDL_DestroyTexture(sprite.texture);
-                            },
-                        }
-                    }
-                },
-            }
+            const i = (ticks / animation.animationDelay + animation.i) % animation.coords.len;
+            const coords = animation.coords[i];
+            try self.sprites.set(entry.id, animation.sheet.sprite(coords.x, coords.y, 0, animation.z));
         }
     }
 
@@ -170,6 +171,13 @@ pub const Engine = struct {
             const particle = entry.value;
             if (ticks >= particle.endTicks) {
                 try self.toDelete.set(entry.id, {});
+                switch (particle.onComplete) {
+                    .DO_NOTHING => {},
+                    .FREE_TEXTURE => {
+                        const sprite = self.sprites.get(entry.id);
+                        sdl.c.SDL_DestroyTexture(sprite.texture);
+                    },
+                }
                 continue;
             }
             const bound = self.bounds.get(entry.id);

@@ -18,7 +18,7 @@ pub fn initLevel1(game: *Game) !void {
     const firstCircleCount = 19;
     const countIncrement = 49;
     const circleCount = 64;
-    const unitDistance = 20;
+    const unitDistance = 30;
 
     var circle: usize = 0;
     var count: usize = firstCircleCount;
@@ -101,14 +101,14 @@ pub fn initLevel2(game: *Game, allocator: std.mem.Allocator) !void {
 pub fn initStress1(game: *Game) !void {
     {
         // monsters
-        const dist: f32 = 20;
-        const size: usize = 500;
+        const dist: f32 = 30;
+        const size: usize = 700;
 
         var i: usize = 0;
         while (i < size) {
             var j: usize = 0;
             while (j < size) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + dist, .y = @intToFloat(f32, j) * dist + dist }, &data.Orc);
+                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 100, .y = @intToFloat(f32, j) * dist + 100 }, &data.Orc);
                 j += 1;
             }
 
@@ -125,5 +125,5 @@ pub fn initStress1(game: *Game) !void {
     //     }
     // }
 
-    try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.MagicTower);
 }

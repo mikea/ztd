@@ -4,7 +4,7 @@ const table = @import("table.zig");
 const Vec = @import("geom.zig").Vec;
 
 pub const Id = u32;
-pub const maxId: usize = 1 << 18;
+pub const maxId: usize = 1 << 19;
 
 // row types definitions
 
@@ -37,11 +37,11 @@ pub const DamageType = union(enum) {
 };
 
 pub const ProjectileAttack = struct {
-        speed: f32,
-        sheet: resources.SpriteSheets,
-        navigation: enum { POS, FOLLOW },
-        damageType: DamageType,
-    };
+    speed: f32,
+    sheet: resources.SpriteSheets,
+    navigation: enum { POS, FOLLOW },
+    damageType: DamageType,
+};
 
 pub const AttackType = union(enum) {
     direct: void,
@@ -63,18 +63,12 @@ pub const AttackersTable = table.Table(Id, maxId, Attacker);
 
 pub const SpriteCoords = struct { x: u8, y: u8 };
 
-pub const Animation = union(enum) {
-    sprites: struct {
-        sheet: *const sdl.SpriteSheet,
-        coords: []const SpriteCoords,
-        animationDelay: u32,
-        z: Layer,
-        i: usize = 0,
-    },
-    timed: struct {
-        endTicks: usize,
-        onComplete: enum { NOTHING, FREE_TEXTURE },
-    },
+pub const Animation = struct {
+    sheet: *const sdl.SpriteSheet,
+    coords: []const SpriteCoords,
+    animationDelay: u32,
+    z: Layer,
+    i: usize = 0,
 };
 
 pub const Navigation = union(enum) {
@@ -113,5 +107,6 @@ pub const Particle = struct {
     v: Vec,
     startTicks: usize,
     endTicks: usize,
+    onComplete: enum { DO_NOTHING, FREE_TEXTURE },
 };
 pub const ParticlesTable = table.Table(Id, maxId, Particle);

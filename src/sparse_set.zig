@@ -130,6 +130,10 @@ pub fn SparseSet(
             self.sparse[lastId] = self.sparse[i];
         }
 
+        pub fn pop(self: *@This()) I {
+            return self.ids.pop();
+        }
+
         pub fn size(self: *const @This()) usize {
             return self.ids.items.len;
         }

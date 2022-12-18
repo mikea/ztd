@@ -74,13 +74,11 @@ pub const Game = struct {
         try self.engine.healths.set(id, d.health);
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
         try self.engine.animations.set(id, .{
-            .sprites = .{
-                .animationDelay = d.animations.walk.delay,
-                .i = id % d.animations.walk.sprites.len,
-                .sheet = self.resources.getSheet(d.animations.walk.sheet),
-                .coords = d.animations.walk.sprites,
-                .z = .MONSTER,
-            },
+            .animationDelay = d.animations.walk.delay,
+            .i = id % d.animations.walk.sprites.len,
+            .sheet = self.resources.getSheet(d.animations.walk.sheet),
+            .coords = d.animations.walk.sprites,
+            .z = .MONSTER,
         });
     }
 
@@ -290,7 +288,7 @@ pub const Game = struct {
                 const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
                 try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, sheet.w) / 4, @intToFloat(f32, sheet.h) / 4));
                 try self.engine.sprites.set(id, .{ .texture = sheet.texture, .src = .{ .x = 0, .y = 0, .w = sheet.w, .h = sheet.h }, .angleRad = angle + sheet.angleRad, .z = .PROJECTILE });
-                try self.engine.particles.set(id, .{.v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration)), .startTicks = ticks, .endTicks = ticks + duration});
+                try self.engine.particles.set(id, .{ .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration)), .startTicks = ticks, .endTicks = ticks + duration, .onComplete = .DO_NOTHING });
                 i += 1;
             }
         }
@@ -345,7 +343,7 @@ pub const Game = struct {
             .angleRad = 0,
             .z = .DAMAGE,
         });
-        try self.engine.particles.set(damageId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -20 }, .endTicks = ticks + 400 });
+        try self.engine.particles.set(damageId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -20 }, .endTicks = ticks + 400, .onComplete = .FREE_TEXTURE });
     }
 
     fn updateDead(self: *Game, ticks: usize, frameAllocator: std.mem.Allocator) !void {
@@ -370,7 +368,7 @@ pub const Game = struct {
                         .angleRad = 0,
                         .z = .DAMAGE,
                     });
-                    try self.engine.particles.set(textId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -15 }, .endTicks = ticks + 600 });
+                    try self.engine.particles.set(textId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -15 }, .endTicks = ticks + 600, .onComplete = .FREE_TEXTURE });
                 }
             }
         }

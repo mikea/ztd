@@ -9,7 +9,7 @@ pub const Vec = struct {
     }
 
     pub fn initAngle(angleRad: f32) Vec {
-        return .{.x = std.math.cos(angleRad), .y = std.math.sin(angleRad)};
+        return .{ .x = std.math.cos(angleRad), .y = std.math.sin(angleRad) };
     }
 
     pub fn add(a: Vec, b: Vec) Vec {
@@ -155,7 +155,13 @@ pub const Rect = struct {
 
     // union is taken
     pub fn add(self: *const Rect, r: Rect) Rect {
-        return .{ .a = .{ .x = std.math.min(self.a.x, r.a.x), .y = std.math.min(self.a.y, r.a.y) }, .b = .{ .x = std.math.max(self.b.x, r.b.x), .y = std.math.max(self.b.y, r.b.y) } };
+        return .{ .a = .{
+            .x = if (self.a.x < r.a.x) self.a.x else r.a.x,
+            .y = if (self.a.y < r.a.y) self.a.y else r.a.y,
+        }, .b = .{
+            .x = if (self.b.x > r.b.x) self.b.x else r.b.x,
+            .y = if (self.b.y > r.b.y) self.b.y else r.b.y,
+        } };
     }
 
     pub fn area(self: *const Rect) f32 {
