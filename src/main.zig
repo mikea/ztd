@@ -40,10 +40,11 @@ const Statistics = struct {
         if (self.lastTicks == 0) {
             return;
         }
-        const text = try std.fmt.allocPrintZ(frameAllocator, "{d} fps\n{d:.0} ms/update\n{d:.0} ms/render\n{e:.1} monsters/sec", .{
+        const text = try std.fmt.allocPrintZ(frameAllocator, "{d} fps\n{d:.0} ms/update\n{d:.0} ms/render\n{d} sprites\n{e:.1} monsters/sec", .{
             1000 / (ticks - self.lastTicks),
             @intToFloat(f64, updateDurationNs) / 1000000,
             @intToFloat(f64, renderDurationNs) / 1000000,
+            game.engine.renderedSprites,
             @intToFloat(f64, game.monsters.size()) * 1000000000 / @intToFloat(f64, updateDurationNs + renderDurationNs),
         });
         try self.engine.setText(self.textId, text, .{ .x = self.engine.viewport.displaySize.x, .y = 0 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);

@@ -236,9 +236,10 @@ pub const UI = struct {
     fn updateBuildShadow(self: *@This()) !void {
         if (self.mode == Mode.BUILD) {
             const towerPrototype = self.towerPrototype;
-            const pos = self.engine.mousePos.grid(@intToFloat(f32, self.towerSheet.w), @intToFloat(f32, self.towerSheet.h));
-            try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(self.towerSheet.w, self.towerSheet.h)));
             const sprite = self.towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
+            const pos = self.engine.mousePos.grid(@intToFloat(f32, self.towerSheet.w), @intToFloat(f32, self.towerSheet.h));
+
+            try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(self.towerSheet.w, self.towerSheet.h)));
             try self.engine.sprites.set(self.shadowId, sprite);
         } else {
             try self.engine.bounds.delete(self.shadowId);

@@ -85,6 +85,7 @@ pub const Engine = struct {
     ids: IdManager,
     running: bool = true,
     mousePos: Vec = .{ .x = 0, .y = 0 },
+    renderedSprites: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *sdl.Renderer) !Engine {
         var displayMode: sdl.c.SDL_DisplayMode = undefined;
@@ -203,6 +204,7 @@ pub const Engine = struct {
         checkInt(sdl.c.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0xff));
         checkInt(sdl.c.SDL_RenderClear(self.renderer));
 
+        self.renderedSprites = 0;
         for (std.enums.values(model.Layer)) |layer| {
             var renderer: struct {
                 engine: *Engine,
@@ -213,6 +215,7 @@ pub const Engine = struct {
                         if (s.z != sprite.z) {
                             return;
                         }
+                        s.engine.renderedSprites += 1;
                         const destRect = s.engine.viewport.toScreen(rect);
                         checkInt(sdl.c.SDL_RenderCopyEx(s.engine.renderer, sprite.texture, &sprite.src, &destRect, 360 * sprite.angleRad / (2 * std.math.pi), null, sdl.c.SDL_FLIP_NONE));
 
