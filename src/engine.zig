@@ -30,7 +30,6 @@ pub const IdManager = struct {
     pub fn nextId(self: *@This()) Id {
         if (self.i == maxId) {
             if (self.avail.size() == 0) {
-                std.log.err("too many ids allocated: max={}", .{maxId});
                 @panic("too many ids");
             }
             return self.avail.pop();

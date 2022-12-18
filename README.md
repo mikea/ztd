@@ -21,6 +21,10 @@ Keys:
 - 1 - upgrade selected tower rate of fire
 - q - quit
 
+## Known Issues
+
+- Render performance suffers when zoomed out a lot
+
 ## Development
 
 Zig 0.11

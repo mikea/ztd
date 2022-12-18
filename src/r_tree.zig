@@ -112,12 +112,16 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         }
 
         fn deleteChild(self: *This, idx: usize, allocator: std.mem.Allocator) void {
-            self.items.children[idx].deinit(allocator);
+            const child = self.items.children[idx];
+            std.debug.assert(child.len == 0);
+            std.debug.assert(child.items == .ids);
+            child.deinit(allocator);
 
             const last = self.len - 1;
             if (idx < last) {
                 self.items.children[idx] = self.items.children[last];
                 self.rects[idx] = self.rects[last];
+                self.items.children[idx].parent = .{ .node = self, .i = @intCast(u16, idx)};
             }
             self.len -= 1;
             if (self.len == 0) {
@@ -338,10 +342,11 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
 
         fn deleteLoc(self: *@This(), loc: Node.Loc) !void {
             try loc.node.deleteEntry(loc.i, &self.locs);
-            // if (loc.node.len == 0) {
-            //     const p = loc.node.parent.?;
-            //     p.node.deleteChild(p.i, self.allocator);
-            // }
+            if (loc.node.len == 0) {
+                const p = loc.node.parent.?;
+                std.debug.assert(p.node.items.children[p.i] == loc.node);
+                p.node.deleteChild(p.i, self.allocator);
+            }
         }
 
         fn find(self: *@This(), id: Id) Node.Loc {

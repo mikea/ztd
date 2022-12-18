@@ -125,6 +125,7 @@ pub fn SparseSet(
         }
 
         pub fn pop(self: *@This()) I {
+            self.values.pop();
             return self.ids.pop();
         }
 
