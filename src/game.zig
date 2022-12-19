@@ -60,10 +60,10 @@ pub const Game = struct {
     }
 
     fn delete(self: *Game, id: Id) !void {
-        try self.attackers.delete(id);
-        try self.monsters.delete(id);
-        try self.towers.delete(id);
-        try self.projectiles.delete(id);
+        self.attackers.delete(id);
+        self.monsters.delete(id);
+        self.towers.delete(id);
+        self.projectiles.delete(id);
         try self.engine.delete(id);
     }
 

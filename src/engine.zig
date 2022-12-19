@@ -121,12 +121,12 @@ pub const Engine = struct {
     }
 
     pub fn delete(self: *Engine, id: Id) !void {
-        try self.bounds.delete(id);
-        try self.texts.delete(id);
-        try self.sprites.delete(id);
-        try self.animations.delete(id);
-        try self.healths.delete(id);
-        try self.particles.delete(id);
+        self.bounds.delete(id);
+        self.texts.delete(id);
+        self.sprites.delete(id);
+        self.animations.delete(id);
+        self.healths.delete(id);
+        self.particles.delete(id);
         try self.ids.free(id);
     }
 
@@ -352,7 +352,6 @@ const Viewport = struct {
             sdl.c.SDL_MOUSEWHEEL => {
                 const z: f32 = if (event.wheel.y > 0) mouseZoom else 1.0 / mouseZoom;
                 self.view = Rect.centered(self.view.center(), self.view.size().scale(z));
-                std.log.debug("height: {}", .{self.view.height()});
             },
             else => {},
         }

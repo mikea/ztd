@@ -11,7 +11,7 @@ This was written to learn Zig and Data Oriented Design approach.
 ## Usage
 
 Start: `./ztd` or `./ztd <level>`.
-Available levels: `level1`, `level2`, `stress1`
+Available levels: `level1`, `level2`, `level3`, `stress1`
 
 Keys:
 

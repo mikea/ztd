@@ -12,7 +12,7 @@ const data = @import("data.zig");
 const RndGen = std.rand.DefaultPrng;
 var rnd = RndGen.init(0);
 
-pub fn initLevel1(game: *Game) !void {
+pub fn initLevel2(game: *Game) !void {
     try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
 
     const firstCircleCount = 19;
@@ -38,7 +38,7 @@ pub fn initLevel1(game: *Game) !void {
     }
 }
 
-pub fn initLevel2(game: *Game, allocator: std.mem.Allocator) !void {
+pub fn initLevel3(game: *Game, allocator: std.mem.Allocator) !void {
     try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
 
     const points = try allocator.alloc(Vec, 20000);
@@ -98,6 +98,38 @@ pub fn initLevel2(game: *Game, allocator: std.mem.Allocator) !void {
     }
 }
 
+pub fn initLevel1(game: *Game) !void {
+    {
+        // monsters
+        const dist: usize = 30;
+        const size: usize = 316;
+
+        var i: usize = 0;
+        while (i < size) {
+            var j: usize = 0;
+            while (j < size) {
+                try game.addMonster(.{ .x = @intToFloat(f32, i * dist + 100), .y = @intToFloat(f32, j * dist + 100) }, &data.Orc);
+                j += 1;
+            }
+
+            i += 1;
+        }
+
+        i = 0;
+        while (i < 12) {
+            var j: usize = 0;
+            while (j < 12) {
+                try game.addMonster(.{ .x = @intToFloat(f32, i * dist + 100 + size * dist), .y = @intToFloat(f32, j * dist + 100 + size * dist)}, &data.Orc);
+                j += 1;
+            }
+
+            i += 1;
+        }
+    }
+
+    try game.addTower(.{ .x = 0, .y = 0 }, &data.ArcherTower);
+}
+
 pub fn initStress1(game: *Game) !void {
     {
         // monsters
@@ -108,7 +140,7 @@ pub fn initStress1(game: *Game) !void {
         while (i < size) {
             var j: usize = 0;
             while (j < size) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 100, .y = @intToFloat(f32, j) * dist + 100 }, &data.Orc);
+                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 10, .y = @intToFloat(f32, j) * dist + 10 }, &data.Orc);
                 j += 1;
             }
 
@@ -116,14 +148,10 @@ pub fn initStress1(game: *Game) !void {
         }
     }
 
-    // {
-    //     // init towers
-    //     var i: i32 = -5000;
-    //     while (i <= 5000) {
-    //         try game.addTower(.{ .x = @intToFloat(f32, i), .y = 0 }, &data.MagicTower);
-    //         i += 200;
-    //     }
-    // }
-
-    try game.addTower(.{ .x = 0, .y = 0 }, &data.MagicTower);
+    var tower = data.MagicTower;
+    tower.attack.damage = data.Orc.health.maxHealth;
+    tower.attack.attackDelayMs = 25;
+    tower.attack.attackType.projectile.speed = 500;
+    tower.size = tower.size.scale(2);
+    try game.addTower(.{ .x = 0, .y = 0 }, &tower);
 }

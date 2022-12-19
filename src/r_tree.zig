@@ -97,7 +97,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             return self.parent.?.node.rects[self.parent.?.i];
         }
 
-        fn deleteEntry(self: *This, idx: usize, locs: *Locs) !void {
+        fn deleteEntry(self: *This, idx: usize, locs: *Locs) void {
             locs.delete(self.items.ids[idx]);
 
             const last = self.len - 1;
@@ -105,7 +105,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
                 const id = self.items.ids[last];
                 self.items.ids[idx] = id;
                 self.rects[idx] = self.rects[last];
-                try locs.set(id, .{ .node = self, .i = @intCast(u16, idx) });
+                locs.update(id, .{ .node = self, .i = @intCast(u16, idx) });
             }
 
             self.len -= 1;
@@ -325,8 +325,8 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             try self.root.findPoint(p, CallbackThis, callbackThis, callback);
         }
 
-        pub fn delete(self: *@This(), id: Id) !void {
-            try self.deleteLoc(self.find(id));
+        pub fn delete(self: *@This(), id: Id) void {
+            self.deleteLoc(self.find(id));
         }
 
         pub fn update(self: *@This(), id: Id, newRect: Rect) !void {
@@ -335,13 +335,13 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             if (loc.node.bounds().containsRect(newRect)) {
                 loc.node.rects[loc.i] = newRect;
             } else {
-                try self.deleteLoc(loc);
+                self.deleteLoc(loc);
                 try self.insert(id, newRect);
             }
         }
 
-        fn deleteLoc(self: *@This(), loc: Node.Loc) !void {
-            try loc.node.deleteEntry(loc.i, &self.locs);
+        fn deleteLoc(self: *@This(), loc: Node.Loc) void {
+            loc.node.deleteEntry(loc.i, &self.locs);
             if (loc.node.len == 0) {
                 const p = loc.node.parent.?;
                 std.debug.assert(p.node.items.children[p.i] == loc.node);

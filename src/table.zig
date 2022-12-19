@@ -1,5 +1,6 @@
 const std = @import("std");
 const SparseSet = @import("sparse_set.zig").SparseSet;
+const DenseSet = @import("dense_set.zig").DenseSet;
 const geom = @import("geom.zig");
 const Rect = geom.Rect;
 const Vec = geom.Vec;
@@ -41,7 +42,7 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
             return self.sparse.get(id);
         }
 
-        pub fn delete(self: *@This(), id: Id) !void {
+        pub fn delete(self: *@This(), id: Id) void {
             return self.sparse.delete(id);
         }
 
@@ -58,11 +59,11 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
 // A table of bounded rectangles that maintanes RTree index.
 pub fn RTable(comptime Id: type, comptime maxId: Id) type {
     return struct {
-        const Set = SparseSet(Id, maxId, Rect);
+        // RTable is dense since we expect almost every object to have bounds.
+        const Set = DenseSet(Id, maxId, Rect);
         const Tree = RTree(Id, maxId, 2000, 2000);
 
         pub const Entry = Set.Entry;
-        // pub const Iterator = Set.Iterator;
 
         sparse: Set,
         tree: Tree,
@@ -83,7 +84,7 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
         }
 
         pub fn set(self: *@This(), id: Id, t: Rect) !void {
-            if (try self.sparse.insertOrUpdate(id, t)) {
+            if (self.sparse.insertOrUpdate(id, t)) {
                 try self.tree.insert(id, t);
             } else {
                 try self.tree.update(id, t);
@@ -98,16 +99,14 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
             return (self.sparse.find(id) orelse return null).*;
         }
 
-        pub fn findEntry(self: *@This(), id: Id) ?Entry {
-            return (self.sparse.findEntry(id) orelse return null).*;
-        }
-
-        pub fn delete(self: *@This(), id: Id) !void {
-            return self.sparse.delete(id);
+        pub fn delete(self: *@This(), id: Id) void {
+            if (self.sparse.delete(id)) {
+                self.tree.delete(id);
+            }
         }
 
         pub fn update(self: *@This(), id: Id, t: Rect) !void {
-            try self.sparse.set(id, t);
+            self.sparse.set(id, t);
             try self.tree.update(id, t);
         }
 

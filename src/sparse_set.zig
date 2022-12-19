@@ -64,6 +64,12 @@ pub fn SparseSet(
             _ = try self.insertOrUpdate(i, t);
         }
 
+        pub fn update(self: *@This(), i: I, t: T) void {
+            const denseIdx = self.sparse[i];
+            std.debug.assert(denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i);
+            self.values.items[denseIdx] = t;
+        }
+
         // returns true if insert happens, false otherwise
         pub fn insertOrUpdate(self: *@This(), i: I, t: T) !bool {
             const denseIdx = self.sparse[i];
@@ -101,6 +107,7 @@ pub fn SparseSet(
             if (denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i) {
                 return &self.values.items[denseIdx];
             }
+            std.log.err("row {} not found", .{i});
             @panic("row not found");
         }
 

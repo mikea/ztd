@@ -44,7 +44,6 @@ pub const UI = struct {
 
     selectedTower: ?model.TowersTable.Entry = null,
     towerPrototype: *const data.TowerData,
-    towerSheet: *const sdl.SpriteSheet,
 
     pub fn init(allocator: std.mem.Allocator, g: *game.Game) !@This() {
         var result: @This() = .{
@@ -56,7 +55,6 @@ pub const UI = struct {
             .selId = g.engine.ids.nextId(),
             .menu = std.ArrayList(MenuItem).init(allocator),
             .towerPrototype = data.BuildTowers[0],
-            .towerSheet = g.resources.getSheet(data.BuildTowers[0].sheet),
         };
         try result.onAction(Action.CANCEL);
         return result;
@@ -76,18 +74,20 @@ pub const UI = struct {
                 }
             },
             sdl.c.SDL_MOUSEBUTTONDOWN => {
-                const pos = self.engine.mousePos.grid(@intToFloat(f32, self.towerSheet.w), @intToFloat(f32, self.towerSheet.h));
-
                 switch (self.mode) {
                     // todo: go through onAction
-                    Mode.BUILD => if (self.game.money >= self.game.towerPrice and (try self.findTower(pos) == null)) {
-                        try self.game.addTower(pos, self.towerPrototype);
-                        self.game.money -= self.game.towerPrice;
-                        self.game.towerPrice = @floatToInt(usize, std.math.round(@intToFloat(f32, self.game.towerPrice) * 1.1));
+                    Mode.BUILD => {
+                        if (self.game.money >= self.game.towerPrice and (try self.findTower(self.engine.mousePos) == null)) {
+                            const towerSheet = self.game.resources.getSheet(self.towerPrototype.sheet);
+                            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
+                            try self.game.addTower(pos, self.towerPrototype);
+                            self.game.money -= self.game.towerPrice;
+                            self.game.towerPrice = @floatToInt(usize, std.math.round(@intToFloat(f32, self.game.towerPrice) * 1.1));
+                        }
                     },
                     Mode.SELECT => {
-                        self.selectedTower = try self.findTower(pos);
-                        self.menu.clearAndFree();
+                        self.selectedTower = try self.findTower(self.engine.mousePos);
+                        self.menu.clearRetainingCapacity();
 
                         try self.menu.append(.{ .text = "Upgrade Damage", .key = sdl.c.SDLK_1, .action = .{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } } });
                         try self.menu.append(.{ .text = "Upgrade Range", .key = sdl.c.SDLK_2, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RANGE } } });
@@ -107,8 +107,7 @@ pub const UI = struct {
             .BUILD_MODE => {
                 self.mode = Mode.BUILD;
                 self.towerPrototype = data.BuildTowers[0];
-                self.towerSheet = self.game.resources.getSheet(data.BuildTowers[0].sheet);
-                self.menu.clearAndFree();
+                self.menu.clearRetainingCapacity();
                 for (data.BuildTowers) |tower, i| {
                     try self.menu.append(.{
                         .text = tower.tower.name,
@@ -121,12 +120,11 @@ pub const UI = struct {
             .CANCEL => {
                 self.mode = Mode.SELECT;
                 self.selectedTower = null;
-                self.menu.clearAndFree();
+                self.menu.clearRetainingCapacity();
                 try self.menu.append(.{ .text = "Build", .key = sdl.c.SDLK_b, .action = Action.BUILD_MODE });
             },
             .SET_TOWER_PROTOTYPE => |tower| {
                 self.towerPrototype = tower;
-                self.towerSheet = self.game.resources.getSheet(tower.sheet);
             },
             .UPGRADE_TOWER => |upgrade| if (self.selectedTower) |towerEntry| {
                 const tower = towerEntry.value;
@@ -229,21 +227,21 @@ pub const UI = struct {
         }
 
         self.selectedTower = null;
-        try self.engine.bounds.delete(self.selId);
-        try self.engine.sprites.delete(self.selId);
+        self.engine.bounds.delete(self.selId);
+        self.engine.sprites.delete(self.selId);
     }
 
     fn updateBuildShadow(self: *@This()) !void {
         if (self.mode == Mode.BUILD) {
             const towerPrototype = self.towerPrototype;
-            const sprite = self.towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
-            const pos = self.engine.mousePos.grid(@intToFloat(f32, self.towerSheet.w), @intToFloat(f32, self.towerSheet.h));
-
-            try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(self.towerSheet.w, self.towerSheet.h)));
+            const towerSheet = self.game.resources.getSheet(towerPrototype.sheet);
+            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
+            const sprite = towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
+            try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(towerSheet.w, towerSheet.h)));
             try self.engine.sprites.set(self.shadowId, sprite);
         } else {
-            try self.engine.bounds.delete(self.shadowId);
-            try self.engine.sprites.delete(self.shadowId);
+            self.engine.bounds.delete(self.shadowId);
+            self.engine.sprites.delete(self.shadowId);
         }
     }
 };

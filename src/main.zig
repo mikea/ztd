@@ -96,7 +96,9 @@ pub fn main() !void {
         if (std.mem.eql(u8, args[1], "stress1")) {
             try levels.initStress1(game);
         } else if (std.mem.eql(u8, args[1], "level2")) {
-            try levels.initLevel2(game, allocator);
+            try levels.initLevel2(game);
+        } else if (std.mem.eql(u8, args[1], "level3")) {
+            try levels.initLevel3(game, allocator);
         } else {
             try levels.initLevel1(game);
         }
