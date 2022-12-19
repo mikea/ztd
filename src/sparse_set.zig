@@ -104,11 +104,8 @@ pub fn SparseSet(
 
         pub fn get(self: *@This(), i: I) *T {
             const denseIdx = self.sparse[i];
-            if (denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i) {
-                return &self.values.items[denseIdx];
-            }
-            std.log.err("row {} not found", .{i});
-            @panic("row not found");
+            std.debug.assert(denseIdx < self.ids.items.len and self.ids.items[denseIdx] == i);
+            return &self.values.items[denseIdx];
         }
 
         pub fn delete(self: *@This(), i: I) void {
