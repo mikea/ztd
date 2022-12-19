@@ -108,7 +108,8 @@ pub fn initLevel1(game: *Game) !void {
         while (i < size) {
             var j: usize = 0;
             while (j < size) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i * dist + 100), .y = @intToFloat(f32, j * dist + 100) }, &data.Orc);
+                try game.addMonster(.{ .x = @intToFloat(f32, i * dist + 100), .y = @intToFloat(f32, j * dist + 100) }, 
+                 if (i == j) &data.RedMonster else &data.Orc);
                 j += 1;
             }
 

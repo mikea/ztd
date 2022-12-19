@@ -70,6 +70,7 @@ pub const UI = struct {
                 for (self.menu.items) |*item| {
                     if (item.key == e.key.keysym.sym) {
                         try self.onAction(item.action);
+                        return;
                     }
                 }
             },
@@ -89,11 +90,12 @@ pub const UI = struct {
                         self.selectedTower = try self.findTower(self.engine.mousePos);
                         self.menu.clearRetainingCapacity();
 
-                        try self.menu.append(.{ .text = "Upgrade Damage", .key = sdl.c.SDLK_1, .action = .{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } } });
-                        try self.menu.append(.{ .text = "Upgrade Range", .key = sdl.c.SDLK_2, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RANGE } } });
-                        try self.menu.append(.{ .text = "Upgrade Rate", .key = sdl.c.SDLK_3, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RATE } } });
-
-                        try self.menu.append(.{ .text = "Cancel", .key = sdl.c.SDLK_ESCAPE, .action = .CANCEL });
+                        if (self.selectedTower != null) {
+                            try self.menu.append(.{ .text = "Upgrade Damage", .key = sdl.c.SDLK_1, .action = .{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } } });
+                            try self.menu.append(.{ .text = "Upgrade Range", .key = sdl.c.SDLK_2, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RANGE } } });
+                            try self.menu.append(.{ .text = "Upgrade Rate", .key = sdl.c.SDLK_3, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RATE } } });
+                            try self.menu.append(.{ .text = "Cancel", .key = sdl.c.SDLK_ESCAPE, .action = .CANCEL });
+                        }
                         try self.menu.append(.{ .text = "Build", .key = sdl.c.SDLK_b, .action = .BUILD_MODE });
                     },
                 }
