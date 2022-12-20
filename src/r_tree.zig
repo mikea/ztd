@@ -4,6 +4,7 @@
 const std = @import("std");
 const geom = @import("geom.zig");
 const SparseSet = @import("sparse_set.zig").SparseSet;
+const Rects = @import("rects.zig").Rects;
 
 const Vec = geom.Vec;
 const Rect = geom.Rect;
@@ -24,8 +25,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         const Locs = SparseSet(Id, maxId, Loc);
 
         parent: ?Loc = null,
-        len: usize = 0,
-        rects: []Rect,
+        rects: Rects,
         items: union(enum) {
             ids: []Id,
             children: []*This,
@@ -36,21 +36,19 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             var node = try allocator.create(This);
             switch (T) {
                 Id => {
-                    node.* = .{ .len = items.len, .rects = try allocator.alloc(Rect, leafSize + 1), .items = .{ .ids = try allocator.alloc(Id, leafSize + 1) } };
+                    node.* = .{ .rects = try Rects.init(allocator, leafSize + 1), .items = .{ .ids = try allocator.alloc(Id, leafSize + 1) } };
                     std.mem.copy(Id, node.items.ids, items);
-                    std.mem.copy(Rect, node.rects, rects);
                 },
                 *This => {
-                    node.* = .{ .len = items.len, .rects = try allocator.alloc(Rect, middleSize + 1), .items = .{ .children = try allocator.alloc(*This, middleSize + 1) } };
+                    node.* = .{ .rects = try Rects.init(allocator, middleSize + 1), .items = .{ .children = try allocator.alloc(*This, middleSize + 1) } };
                     std.mem.copy(*This, node.items.children, items);
-                    std.mem.copy(Rect, node.rects, rects);
                     for (items) |*item, i| {
                         item.*.parent = .{ .node = node, .i = @intCast(u16, i) };
                     }
                 },
                 else => unreachable,
             }
-
+            node.rects.copyFrom(rects);
             return node;
         }
 
@@ -58,58 +56,60 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             switch (self.items) {
                 .ids => |ids| allocator.free(ids),
                 .children => |children| {
-                    for (children[0..self.len]) |child| {
+                    for (children[0..self.rects.len()]) |child| {
                         child.deinit(allocator);
                     }
                     allocator.free(children);
                 },
             }
-            allocator.free(self.rects);
+            self.rects.deinit(allocator);
             allocator.destroy(self);
         }
 
         // T is either Id for leaves or *This for middle nodes
-        fn add(self: *This, comptime T: type, idOrChild: T, rect: Rect) void {
+        fn add(self: *This, comptime T: type, idOrChild: T, rect: Rect) usize {
+            const i = self.rects.len();
+            self.rects.append(rect);
+
             switch (T) {
                 Id => {
-                    self.items.ids[self.len] = idOrChild;
+                    self.items.ids[i] = idOrChild;
                 },
                 *This => {
-                    self.items.children[self.len] = idOrChild;
-                    idOrChild.parent = .{ .node = self, .i = @intCast(u16, self.len) };
+                    self.items.children[i] = idOrChild;
+                    idOrChild.parent = .{ .node = self, .i = @intCast(u16, i) };
                 },
                 else => unreachable,
             }
-
-            self.rects[self.len] = rect;
-            self.len += 1;
+            return i;
         }
 
         fn adjustTree(startNode: *This, rect: Rect) void {
             var n = startNode;
             while (n.parent) |parent| {
-                parent.node.rects[parent.i] = parent.node.rects[parent.i].add(rect);
+                parent.node.rects.add(parent.i, rect);
                 n = parent.node;
             }
         }
 
         fn bounds(self: *const This) Rect {
-            return self.parent.?.node.rects[self.parent.?.i];
+            return self.parent.?.node.rects.get(self.parent.?.i);
         }
 
         fn deleteEntry(self: *This, idx: usize, locs: *Locs, allocator: std.mem.Allocator) void {
             locs.delete(self.items.ids[idx]);
 
-            const last = self.len - 1;
+            const lastRec = self.rects.pop();
+            const last = self.rects.len();
+
             if (idx < last) {
                 const id = self.items.ids[last];
                 self.items.ids[idx] = id;
-                self.rects[idx] = self.rects[last];
+                self.rects.set(idx, lastRec);
                 locs.update(id, .{ .node = self, .i = @intCast(u16, idx) });
             }
 
-            self.len -= 1;
-            if (self.len == 0) {
+            if (self.rects.len() == 0) {
                 const p = self.parent.?;
                 std.debug.assert(p.node.items.children[p.i] == self);
                 p.node.deleteChild(p.i, allocator);
@@ -118,17 +118,19 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
 
         fn deleteChild(self: *This, idx: usize, allocator: std.mem.Allocator) void {
             const child = self.items.children[idx];
-            std.debug.assert(child.len == 0);
+            std.debug.assert(child.rects.len() == 0);
             child.deinit(allocator);
 
-            const last = self.len - 1;
+            const last = self.rects.len() - 1;
+            const lastRec = self.rects.pop();
+
             if (idx < last) {
                 self.items.children[idx] = self.items.children[last];
-                self.rects[idx] = self.rects[last];
+                self.rects.set(idx, lastRec);
                 self.items.children[idx].parent = .{ .node = self, .i = @intCast(u16, idx) };
             }
-            self.len -= 1;
-            if (self.len == 0) {
+
+            if (self.rects.len() == 0) {
                 if (self.parent) |p| {
                     std.debug.assert(p.node.items.children[p.i] == self);
                     p.node.deleteChild(p.i, allocator);
@@ -143,44 +145,29 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             writer: anytype,
         ) !void {
             switch (self.items) {
-                .ids => |ids| try writer.print("Leaf[rects={s}, ids={d}]", .{ self.rects[0..self.len], ids[0..self.len] }),
+                .ids => |ids| try writer.print("Leaf[rects={s}, ids={d}]", .{ self.rects, ids[0..self.rects.len()] }),
                 .children => |children| {
-                    try writer.print("Middle[rects={s}, children={s}]", .{ self.rects[0..self.len], children[0..self.len] });
-                },
-            }
-        }
-
-        pub fn checkConsistency(self: *const @This()) void {
-            switch (self.items) {
-                .leaf => |*entries| {
-                    for (entries[0..self.len]) |entry| {
-                        if (!self.rect.containsRect(entry.rect)) {
-                            std.log.err("inconsistent leaf entry: {} {}", .{ self.rect, entry });
-                            @panic("inconsistent tree");
-                        }
-                    }
-                },
-                .middle => |children| {
-                    for (children[0..self.len]) |child| {
-                        if (!self.rect.containsRect(child.rect)) {
-                            @panic("inconsistent tree");
-                        }
-                        child.checkConsistency();
-                    }
+                    try writer.print("Middle[rects={s}, children={s}]", .{ self.rects, children[0..self.rects.len()] });
                 },
             }
         }
 
         pub fn findIntersect(self: *const @This(), rect: Rect, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
             switch (self.items) {
-                .ids => |ids| for (self.rects[0..self.len]) |r, i| {
-                    if (r.intersects(rect)) {
-                        try callback(callbackThis, ids[i], r);
+                .ids => |ids| {
+                    var i: usize = 0;
+                    while (i < self.rects.len()) : (i += 1) {
+                        if (self.rects.intersects(i, rect)) {
+                            try callback(callbackThis, ids[i], self.rects.get(i));
+                        }
                     }
                 },
-                .children => |children| for (self.rects[0..self.len]) |r, i| {
-                    if (r.intersects(rect)) {
-                        try children[i].findIntersect(rect, CallbackThis, callbackThis, callback);
+                .children => |children| {
+                    var i: usize = 0;
+                    while (i < self.rects.len()) : (i += 1) {
+                        if (self.rects.intersects(i, rect)) {
+                            try children[i].findIntersect(rect, CallbackThis, callbackThis, callback);
+                        }
                     }
                 },
             }
@@ -188,14 +175,20 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
 
         pub fn findPoint(self: *const @This(), p: Vec, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
             switch (self.items) {
-                .ids => |ids| for (self.rects[0..self.len]) |rect, i| {
-                    if (rect.containsVec(p)) {
-                        try callback(callbackThis, ids[i], rect);
+                .ids => |ids| {
+                    var i: usize = 0;
+                    while (i < self.rects.len()) : (i += 1) {
+                        if (self.rects.contains(i, p)) {
+                            try callback(callbackThis, ids[i], self.rects.get(i));
+                        }
                     }
                 },
-                .children => |children| for (self.rects[0..self.len]) |rect, i| {
-                    if (rect.containsVec(p)) {
-                        try children[i].findPoint(p, CallbackThis, callbackThis, callback);
+                .children => |children| {
+                    var i: usize = 0;
+                    while (i < self.rects.len()) : (i += 1) {
+                        if (self.rects.contains(i, p)) {
+                            try children[i].findPoint(p, CallbackThis, callbackThis, callback);
+                        }
                     }
                 },
             }
@@ -222,54 +215,52 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             while (true) {
                 switch (node.items) {
                     .ids => return node,
-                    .children => |children| node = children[chooseBestNode(node.rects[0..node.len], rect)],
+                    .children => |children| node = children[node.rects.chooseBestNode(rect)],
                 }
             }
         }
 
         pub fn insert(self: *@This(), id: Id, rect: Rect) !void {
             const leafNode = self.chooseLeaf(rect);
-            std.debug.assert(leafNode.len <= leafSize);
+            std.debug.assert(leafNode.rects.len() <= leafSize);
 
-            leafNode.add(Id, id, rect);
-            try self.locs.set(id, .{ .node = leafNode, .i = @intCast(u16, leafNode.len - 1) });
+            const i = leafNode.add(Id, id, rect);
+            try self.locs.set(id, .{ .node = leafNode, .i = @intCast(u16, i) });
             Node.adjustTree(leafNode, rect);
 
-            if (leafNode.len == leafSize + 1) {
+            if (i == leafSize) {
                 try self.splitNode(Id, leafNode);
-            } else {
-                std.debug.assert(leafNode.len <= leafSize);
             }
         }
 
         fn splitNode(self: *@This(), comptime T: type, node: *Node) error{OutOfMemory}!void {
-            var allRects = node.rects;
+            var allRects = &node.rects;
             var items = if (T == Id) node.items.ids else node.items.children;
-            std.debug.assert(allRects.len == items.len);
-            std.debug.assert(allRects.len == node.len);
+            std.debug.assert(allRects.cap == items.len);
+            std.debug.assert(allRects.cap == allRects.len());
 
             // QS1 pick first entry for each group
-            const seeds = linearPickSeeds(allRects);
+            const seeds = allRects.linearPickSeeds();
             var result = [2]*Node{
-                try Node.init(self.allocator, T, &[_]T{items[seeds[0]]}, &[_]Rect{allRects[seeds[0]]}),
-                try Node.init(self.allocator, T, &[_]T{items[seeds[1]]}, &[_]Rect{allRects[seeds[1]]}),
+                try Node.init(self.allocator, T, &[_]T{items[seeds[0]]}, &[_]Rect{allRects.get(seeds[0])}),
+                try Node.init(self.allocator, T, &[_]T{items[seeds[1]]}, &[_]Rect{allRects.get(seeds[1])}),
             };
 
-            var seedRects = [_]Rect{ allRects[seeds[0]], allRects[seeds[1]] };
-            var resultRects = [_]Rect{ allRects[seeds[0]], allRects[seeds[1]] };
+            var seedRects = [_]Rect{ allRects.get(seeds[0]), allRects.get(seeds[1]) };
+            var resultRects = [_]Rect{ allRects.get(seeds[0]), allRects.get(seeds[1]) };
 
             // add the rest
             for (items) |item, i| {
                 if (i == seeds[0] or i == seeds[1]) {
                     continue;
                 }
-                const itemRect = allRects[i];
+                const itemRect = allRects.get(i);
                 // need to compare to original rect to handle well the case when bounds are in a line.
                 if (seedRects[0].add(itemRect).area() < seedRects[1].add(itemRect).area()) {
-                    result[0].add(T, item, itemRect);
+                    _ = result[0].add(T, item, itemRect);
                     resultRects[0] = resultRects[0].add(itemRect);
                 } else {
-                    result[1].add(T, item, itemRect);
+                    _ = result[1].add(T, item, itemRect);
                     resultRects[1] = resultRects[1].add(itemRect);
                 }
             }
@@ -277,25 +268,25 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             // update locs
             if (T == Id) {
                 for (result) |n| {
-                    for (n.items.ids[0..n.len]) |id, i| {
+                    for (n.items.ids[0..n.rects.len()]) |id, i| {
                         try self.locs.set(id, .{ .node = n, .i = @intCast(u16, i) });
                     }
                 }
             }
 
             if (T == Id) {
-                std.debug.assert(result[0].len <= leafSize);
-                std.debug.assert(result[1].len <= leafSize);
+                std.debug.assert(result[0].rects.len() <= leafSize);
+                std.debug.assert(result[1].rects.len() <= leafSize);
             } else {
-                std.debug.assert(result[0].len <= middleSize);
-                std.debug.assert(result[1].len <= middleSize);
+                std.debug.assert(result[0].rects.len() <= middleSize);
+                std.debug.assert(result[1].rects.len() <= middleSize);
             }
 
             try self.replaceSplitChild(node.parent, node, result, resultRects);
         }
 
         fn replaceSplitChild(self: *@This(), maybeParent: ?Node.Loc, child: *Node, split: [2]*Node, rects: [2]Rect) !void {
-            child.len = 0;
+            child.rects.clear();
             defer child.deinit(self.allocator);
 
             if (maybeParent == null) {
@@ -306,20 +297,20 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             }
 
             var parent = maybeParent.?.node;
-            for (parent.items.children[0..parent.len]) |ch, i| { // todo
+            const l = parent.rects.len();
+            for (parent.items.children[0..l]) |ch, i| { // todo
                 if (ch == child) {
                     parent.items.children[i] = split[0];
-                    parent.rects[i] = rects[0];
+                    parent.rects.set(i, rects[0]);
                     split[0].parent = .{ .node = parent, .i = @intCast(u16, i) };
                     break;
                 }
             }
 
-            parent.items.children[parent.len] = split[1];
-            parent.rects[parent.len] = rects[1];
-            split[1].parent = .{ .node = parent, .i = @intCast(u16, parent.len) };
-            parent.len += 1;
-            if (parent.len == parent.rects.len) {
+            parent.items.children[l] = split[1];
+            split[1].parent = .{ .node = parent, .i = @intCast(u16, l) };
+            parent.rects.append(rects[1]);
+            if (parent.rects.len() == parent.rects.cap) {
                 try self.splitNode(*Node, parent);
             }
         }
@@ -340,7 +331,7 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             const loc = self.find(id);
             std.debug.assert(loc.node.items.ids[loc.i] == id);
             if (loc.node.bounds().containsRect(newRect)) {
-                loc.node.rects[loc.i] = newRect;
+                loc.node.rects.set(loc.i, newRect);
             } else {
                 self.deleteLoc(loc.*);
                 try self.insert(id, newRect);
@@ -368,93 +359,6 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             try writer.print("RTree[root={}]", .{self.root});
         }
     };
-}
-
-// chooses a rect that will gain the least area if extended to include
-// given rect.
-fn chooseBestNode(rects: []const Rect, rect: Rect) usize {
-    // quick scan first
-    for (rects) |r, i| {
-        if (r.containsRect(rect)) {
-            return i;
-        }
-    }
-
-    var result: usize = 0;
-    var minDelta: f32 = std.math.inf_f32;
-
-    for (rects) |r, i| {
-        const delta = r.add(rect).area() - r.area();
-
-        if (delta < minDelta) {
-            minDelta = delta;
-            result = i;
-        }
-    }
-
-    return result;
-}
-
-fn linearPickSeeds(rects: []Rect) [2]usize {
-    // LPS1 Find extreme rectangles along all dimensions
-    const first = rects[0];
-    const last = rects[rects.len - 1];
-
-    var lowestX = first.a.x;
-    var lowestY = first.a.y;
-    var highestX = first.b.x;
-    var highestY = first.b.y;
-
-    var highestLowX = first.a.x;
-    var highestLowXIdx: usize = 0;
-    var lowestHighX = last.b.x;
-    var lowestHighXIdx: usize = rects.len - 1;
-
-    var highestLowY = first.a.y;
-    var highestLowYIdx: usize = 0;
-    var lowestHighY = last.b.y;
-    var lowestHighYIdx: usize = rects.len - 1;
-
-    for (rects) |rect, i| {
-        lowestX = std.math.min(lowestX, rect.a.x);
-        lowestY = std.math.min(lowestY, rect.a.y);
-
-        highestX = std.math.max(highestX, rect.b.x);
-        highestY = std.math.max(highestY, rect.b.y);
-
-        if (rect.a.x > highestLowX and i != lowestHighXIdx) {
-            highestLowX = rect.a.x;
-            highestLowXIdx = i;
-        }
-        if (rect.a.y > highestLowY and i != lowestHighYIdx) {
-            highestLowY = rect.a.y;
-            highestLowYIdx = i;
-        }
-
-        if (rect.b.x < lowestHighX and i != highestLowXIdx) {
-            lowestHighX = rect.b.x;
-            lowestHighXIdx = i;
-        }
-        if (rect.b.y < lowestHighY and i != highestLowYIdx) {
-            lowestHighY = rect.b.y;
-            lowestHighYIdx = i;
-        }
-    }
-
-    const separationX = std.math.fabs(lowestHighX - highestLowX);
-    const separationY = std.math.fabs(lowestHighY - highestLowY);
-
-    // LPS2 Adjust for shape of the rectangle cluster
-    const normSeparationX = separationX / (highestX - lowestX);
-    const normSeparationY = separationY / (highestY - lowestY);
-
-    if (normSeparationX > normSeparationY) {
-        std.debug.assert(lowestHighXIdx != highestLowXIdx);
-        return [_]usize{ lowestHighXIdx, highestLowXIdx };
-    } else {
-        std.debug.assert(lowestHighYIdx != highestLowYIdx);
-        return [_]usize{ lowestHighYIdx, highestLowYIdx };
-    }
 }
 
 // tests
