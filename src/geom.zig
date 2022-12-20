@@ -153,7 +153,6 @@ pub const Rect = struct {
         return r.a.x >= self.a.x and r.a.y >= self.a.y and r.b.x <= self.b.x and r.b.y <= self.b.y;
     }
 
-    // union is taken
     pub fn add(self: *const Rect, r: Rect) Rect {
         return .{ .a = .{
             .x = if (self.a.x < r.a.x) self.a.x else r.a.x,

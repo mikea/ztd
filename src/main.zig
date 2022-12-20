@@ -37,7 +37,7 @@ const Statistics = struct {
 
     pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, game: *Game, updateDurationNs: u64, renderDurationNs: u64) !void {
         defer self.lastTicks = ticks;
-        if (self.lastTicks == 0) {
+        if (self.lastTicks == 0 or ticks == self.lastTicks) {
             return;
         }
         const text = try std.fmt.allocPrintZ(frameAllocator, "{d} fps\n{d:.0} ms/update\n{d:.0} ms/render\n{d} sprites\n{e:.1} monsters/sec", .{

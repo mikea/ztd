@@ -141,7 +141,7 @@ pub fn initStress1(game: *Game) !void {
         while (i < size) {
             var j: usize = 0;
             while (j < size) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 10, .y = @intToFloat(f32, j) * dist + 10 }, &data.Orc);
+                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 30, .y = @intToFloat(f32, j) * dist + 30 }, &data.Orc);
                 j += 1;
             }
 
