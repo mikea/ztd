@@ -11,7 +11,7 @@ const Rect = geom.Rect;
 const inf = std.math.inf_f32;
 const assert = std.debug.assert;
 
-pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, comptime middleSize: usize) type {
+pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, comptime middleSize: usize, comptime blockSize: usize) type {
     const Node = struct {
         const This = @This();
 
@@ -25,58 +25,67 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         const Locs = SparseSet(Id, maxId, Loc);
 
         parent: ?Loc = null,
-        rects: Rects,
-        items: union(enum) {
+        items: union(enum) { leaf: struct {
             ids: []Id,
+            rects: Rects(leafSize + 1, blockSize),
+        }, middle: struct {
             children: []*This,
-        },
+            rects: Rects(middleSize + 1, blockSize),
+        } },
+        len: usize,
 
         // T is either Id for leaves or *This for middle nodes
         fn init(allocator: std.mem.Allocator, comptime T: type, items: []const T, rects: []const Rect) !*This {
             var node = try allocator.create(This);
             switch (T) {
                 Id => {
-                    node.* = .{ .rects = try Rects.init(allocator, leafSize + 1), .items = .{ .ids = try allocator.alloc(Id, leafSize + 1) } };
-                    std.mem.copy(Id, node.items.ids, items);
+                    node.* = .{ .len = rects.len, .items = .{ .leaf = .{ .ids = try allocator.alloc(Id, leafSize + 1), .rects = try Rects(leafSize + 1, blockSize).init(allocator) } } };
+                    std.mem.copy(Id, node.items.leaf.ids, items);
+                    node.items.leaf.rects.copyFrom(rects);
                 },
                 *This => {
-                    node.* = .{ .rects = try Rects.init(allocator, middleSize + 1), .items = .{ .children = try allocator.alloc(*This, middleSize + 1) } };
-                    std.mem.copy(*This, node.items.children, items);
+                    node.* = .{ .len = rects.len, .items = .{ .middle = .{ .children = try allocator.alloc(*This, middleSize + 1), .rects = try Rects(middleSize + 1, blockSize).init(allocator) } } };
+                    std.mem.copy(*This, node.items.middle.children, items);
+                    node.items.middle.rects.copyFrom(rects);
                     for (items) |*item, i| {
                         item.*.parent = .{ .node = node, .i = @intCast(u16, i) };
                     }
                 },
                 else => unreachable,
             }
-            node.rects.copyFrom(rects);
             return node;
         }
 
         fn deinit(self: *This, allocator: std.mem.Allocator) void {
             switch (self.items) {
-                .ids => |ids| allocator.free(ids),
-                .children => |children| {
-                    for (children[0..self.rects.len()]) |child| {
+                .leaf => |*leaf| {
+                    allocator.free(leaf.ids);
+                    leaf.rects.deinit(allocator);
+                },
+                .middle => |*middle| {
+                    for (middle.children[0..self.len]) |child| {
                         child.deinit(allocator);
                     }
-                    allocator.free(children);
+                    allocator.free(middle.children);
+                    middle.rects.deinit(allocator);
                 },
             }
-            self.rects.deinit(allocator);
             allocator.destroy(self);
         }
 
         // T is either Id for leaves or *This for middle nodes
         fn add(self: *This, comptime T: type, idOrChild: T, rect: Rect) usize {
-            const i = self.rects.len();
-            self.rects.append(rect);
+            const i = self.len;
+            self.len += 1;
 
             switch (T) {
                 Id => {
-                    self.items.ids[i] = idOrChild;
+                    self.items.leaf.rects.append(rect);
+                    self.items.leaf.ids[i] = idOrChild;
                 },
                 *This => {
-                    self.items.children[i] = idOrChild;
+                    self.items.middle.rects.append(rect);
+                    self.items.middle.children[i] = idOrChild;
                     idOrChild.parent = .{ .node = self, .i = @intCast(u16, i) };
                 },
                 else => unreachable,
@@ -87,52 +96,57 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         fn adjustTree(startNode: *This, rect: Rect) void {
             var n = startNode;
             while (n.parent) |parent| {
-                parent.node.rects.add(parent.i, rect);
+                parent.node.items.middle.rects.add(parent.i, rect);
                 n = parent.node;
             }
         }
 
-        fn bounds(self: *const This) Rect {
-            return self.parent.?.node.rects.get(self.parent.?.i);
+        fn containsRect(self: *const This, rect: Rect) bool {
+            const parent = self.parent.?;
+            return parent.node.items.middle.rects.containsRect(parent.i, rect);
         }
 
         fn deleteEntry(self: *This, idx: usize, locs: *Locs, allocator: std.mem.Allocator) void {
-            locs.delete(self.items.ids[idx]);
+            const leaf = &self.items.leaf;
+            locs.delete(leaf.ids[idx]);
 
-            const lastRec = self.rects.pop();
-            const last = self.rects.len();
+            const lastRec = leaf.rects.pop();
+            self.len -= 1;
+            const last = self.len;
 
             if (idx < last) {
-                const id = self.items.ids[last];
-                self.items.ids[idx] = id;
-                self.rects.set(idx, lastRec);
+                const id = leaf.ids[last];
+                leaf.ids[idx] = id;
+                leaf.rects.set(idx, lastRec);
                 locs.update(id, .{ .node = self, .i = @intCast(u16, idx) });
             }
 
-            if (self.rects.len() == 0) {
+            if (self.len == 0) {
                 const p = self.parent.?;
-                std.debug.assert(p.node.items.children[p.i] == self);
+                std.debug.assert(p.node.items.middle.children[p.i] == self);
                 p.node.deleteChild(p.i, allocator);
             }
         }
 
         fn deleteChild(self: *This, idx: usize, allocator: std.mem.Allocator) void {
-            const child = self.items.children[idx];
-            std.debug.assert(child.rects.len() == 0);
+            const middle = &self.items.middle;
+            const child = self.items.middle.children[idx];
+            std.debug.assert(child.len == 0);
             child.deinit(allocator);
 
-            const last = self.rects.len() - 1;
-            const lastRec = self.rects.pop();
+            self.len -= 1;
+            const last = self.len;
+            const lastRec = middle.rects.pop();
 
             if (idx < last) {
-                self.items.children[idx] = self.items.children[last];
-                self.rects.set(idx, lastRec);
-                self.items.children[idx].parent = .{ .node = self, .i = @intCast(u16, idx) };
+                middle.children[idx] = middle.children[last];
+                middle.rects.set(idx, lastRec);
+                middle.children[idx].parent = .{ .node = self, .i = @intCast(u16, idx) };
             }
 
-            if (self.rects.len() == 0) {
+            if (self.len == 0) {
                 if (self.parent) |p| {
-                    std.debug.assert(p.node.items.children[p.i] == self);
+                    std.debug.assert(p.node.items.middle.children[p.i] == self);
                     p.node.deleteChild(p.i, allocator);
                 }
             }
@@ -145,28 +159,28 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             writer: anytype,
         ) !void {
             switch (self.items) {
-                .ids => |ids| try writer.print("Leaf[rects={s}, ids={d}]", .{ self.rects, ids[0..self.rects.len()] }),
-                .children => |children| {
-                    try writer.print("Middle[rects={s}, children={s}]", .{ self.rects, children[0..self.rects.len()] });
+                .leaf => |*leaf| try writer.print("Leaf[rects={s}, ids={d}]", .{ leaf.rects, leaf.ids[0..self.len] }),
+                .middle => |*middle| {
+                    try writer.print("Middle[rects={s}, children={s}]", .{ middle.rects, middle.children[0..self.len] });
                 },
             }
         }
 
         pub fn findIntersect(self: *const @This(), rect: Rect, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
             switch (self.items) {
-                .ids => |ids| {
+                .leaf => |*leaf| {
                     var i: usize = 0;
-                    while (i < self.rects.len()) : (i += 1) {
-                        if (self.rects.intersects(i, rect)) {
-                            try callback(callbackThis, ids[i], self.rects.get(i));
+                    while (i < self.len) : (i += 1) {
+                        if (leaf.rects.intersects(i, rect)) {
+                            try callback(callbackThis, leaf.ids[i], leaf.rects.get(i));
                         }
                     }
                 },
-                .children => |children| {
+                .middle => |*middle| {
                     var i: usize = 0;
-                    while (i < self.rects.len()) : (i += 1) {
-                        if (self.rects.intersects(i, rect)) {
-                            try children[i].findIntersect(rect, CallbackThis, callbackThis, callback);
+                    while (i < self.len) : (i += 1) {
+                        if (middle.rects.intersects(i, rect)) {
+                            try middle.children[i].findIntersect(rect, CallbackThis, callbackThis, callback);
                         }
                     }
                 },
@@ -175,19 +189,19 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
 
         pub fn findPoint(self: *const @This(), p: Vec, comptime CallbackThis: type, callbackThis: *CallbackThis, comptime callback: fn (that: *CallbackThis, id: Id, rect: Rect) error{OutOfMemory}!void) !void {
             switch (self.items) {
-                .ids => |ids| {
+                .leaf => |*leaf| {
                     var i: usize = 0;
-                    while (i < self.rects.len()) : (i += 1) {
-                        if (self.rects.contains(i, p)) {
-                            try callback(callbackThis, ids[i], self.rects.get(i));
+                    while (i < self.len) : (i += 1) {
+                        if (leaf.rects.containsVec(i, p)) {
+                            try callback(callbackThis, leaf.ids[i], leaf.rects.get(i));
                         }
                     }
                 },
-                .children => |children| {
+                .middle => |*middle| {
                     var i: usize = 0;
-                    while (i < self.rects.len()) : (i += 1) {
-                        if (self.rects.contains(i, p)) {
-                            try children[i].findPoint(p, CallbackThis, callbackThis, callback);
+                    while (i < self.len) : (i += 1) {
+                        if (middle.rects.containsVec(i, p)) {
+                            try middle.children[i].findPoint(p, CallbackThis, callbackThis, callback);
                         }
                     }
                 },
@@ -214,15 +228,15 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             var node = self.root;
             while (true) {
                 switch (node.items) {
-                    .ids => return node,
-                    .children => |children| node = children[node.rects.chooseBestNode(rect)],
+                    .leaf => return node,
+                    .middle => |*middle| node = middle.children[middle.rects.chooseBestNode(rect)],
                 }
             }
         }
 
         pub fn insert(self: *@This(), id: Id, rect: Rect) !void {
             const leafNode = self.chooseLeaf(rect);
-            std.debug.assert(leafNode.rects.len() <= leafSize);
+            std.debug.assert(leafNode.len <= leafSize);
 
             const i = leafNode.add(Id, id, rect);
             try self.locs.set(id, .{ .node = leafNode, .i = @intCast(u16, i) });
@@ -234,10 +248,10 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
         }
 
         fn splitNode(self: *@This(), comptime T: type, node: *Node) error{OutOfMemory}!void {
-            var allRects = &node.rects;
-            var items = if (T == Id) node.items.ids else node.items.children;
-            std.debug.assert(allRects.cap == items.len);
-            std.debug.assert(allRects.cap == allRects.len());
+            var allRects = if (T == Id) &node.items.leaf.rects else &node.items.middle.rects;
+            var items = if (T == Id) node.items.leaf.ids else node.items.middle.children;
+            std.debug.assert(allRects.capacity == items.len);
+            std.debug.assert(allRects.capacity == allRects.len);
 
             // QS1 pick first entry for each group
             const seeds = allRects.linearPickSeeds();
@@ -268,25 +282,25 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             // update locs
             if (T == Id) {
                 for (result) |n| {
-                    for (n.items.ids[0..n.rects.len()]) |id, i| {
+                    for (n.items.leaf.ids[0..n.len]) |id, i| {
                         try self.locs.set(id, .{ .node = n, .i = @intCast(u16, i) });
                     }
                 }
             }
 
             if (T == Id) {
-                std.debug.assert(result[0].rects.len() <= leafSize);
-                std.debug.assert(result[1].rects.len() <= leafSize);
+                std.debug.assert(result[0].len <= leafSize);
+                std.debug.assert(result[1].len <= leafSize);
             } else {
-                std.debug.assert(result[0].rects.len() <= middleSize);
-                std.debug.assert(result[1].rects.len() <= middleSize);
+                std.debug.assert(result[0].len <= middleSize);
+                std.debug.assert(result[1].len <= middleSize);
             }
 
             try self.replaceSplitChild(node.parent, node, result, resultRects);
         }
 
         fn replaceSplitChild(self: *@This(), maybeParent: ?Node.Loc, child: *Node, split: [2]*Node, rects: [2]Rect) !void {
-            child.rects.clear();
+            child.len = 0;
             defer child.deinit(self.allocator);
 
             if (maybeParent == null) {
@@ -297,20 +311,21 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
             }
 
             var parent = maybeParent.?.node;
-            const l = parent.rects.len();
-            for (parent.items.children[0..l]) |ch, i| { // todo
+            const l = parent.len;
+            for (parent.items.middle.children[0..l]) |ch, i| { // todo
                 if (ch == child) {
-                    parent.items.children[i] = split[0];
-                    parent.rects.set(i, rects[0]);
+                    parent.items.middle.rects.set(i, rects[0]);
+                    parent.items.middle.children[i] = split[0];
                     split[0].parent = .{ .node = parent, .i = @intCast(u16, i) };
                     break;
                 }
             }
 
-            parent.items.children[l] = split[1];
+            parent.items.middle.rects.append(rects[1]);
+            parent.items.middle.children[l] = split[1];
             split[1].parent = .{ .node = parent, .i = @intCast(u16, l) };
-            parent.rects.append(rects[1]);
-            if (parent.rects.len() == parent.rects.cap) {
+            parent.len += 1;
+            if (parent.len == middleSize + 1) {
                 try self.splitNode(*Node, parent);
             }
         }
@@ -329,9 +344,9 @@ pub fn RTree(comptime Id: type, comptime maxId: Id, comptime leafSize: usize, co
 
         pub fn update(self: *@This(), id: Id, newRect: Rect) !void {
             const loc = self.find(id);
-            std.debug.assert(loc.node.items.ids[loc.i] == id);
-            if (loc.node.bounds().containsRect(newRect)) {
-                loc.node.rects.set(loc.i, newRect);
+            std.debug.assert(loc.node.items.leaf.ids[loc.i] == id);
+            if (loc.node.containsRect(newRect)) {
+                loc.node.items.leaf.rects.set(loc.i, newRect);
             } else {
                 self.deleteLoc(loc.*);
                 try self.insert(id, newRect);
@@ -372,7 +387,7 @@ fn expectFormat(tree: anytype, expected: []const u8) !void {
 }
 
 test "rtree" {
-    var tree = try RTree(u16, 1024, 4, 3).init(std.testing.allocator);
+    var tree = try RTree(u16, 1024, 3, 3, 4).init(std.testing.allocator);
     defer tree.deinit();
 
     try expectFormat(&tree, "RTree[root=Leaf[rects={  }, ids={  }]]");
@@ -412,50 +427,44 @@ test "rtree" {
     try expectFormat(&tree, "RTree[root=Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }]]");
 
     try tree.insert(3, Rect.init(5, 5, 7, 7));
-    try expectFormat(&tree, "RTree[root=Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 0, 1, 2, 3 }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)], [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
+        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 3, 2 }], " ++
+        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }] }]]");
 
     try tree.insert(4, Rect.init(4, 4, 6, 6));
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(4.0e+00,4.0e+00),(7.0e+00,7.0e+00)], [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
-        "Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 4, 3 }], " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(4.0e+00,4.0e+00),(8.0e+00,8.0e+00)], [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
+        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)] }, ids={ 3, 2, 4 }], " ++
+        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }] }]]");
 
     try tree.insert(5, Rect.init(3, 3, 5, 5));
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)], [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
-        "Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 4, 3, 5 }], " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(3.0e+00,3.0e+00),(6.0e+00,6.0e+00)], [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ " ++
+        "Leaf[rects={ [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)] }, ids={ 5, 4 }], " ++
+        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], " ++
+        "Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }]]");
 
     try tree.insert(6, Rect.init(2, 2, 4, 4));
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(2.0e+00,2.0e+00),(7.0e+00,7.0e+00)], [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
-        "Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 4, 3, 5, 6 }], " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(2.0e+00,2.0e+00),(6.0e+00,6.0e+00)], [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ " ++
+        "Leaf[rects={ [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 5, 4, 6 }], " ++
+        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], " ++
+        "Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }]]");
 
     try tree.insert(7, Rect.init(1, 1, 3, 3));
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(1.0e+00,1.0e+00),(4.0e+00,4.0e+00)], [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)], [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 7, 6 }], " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }], " ++
-        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 3, 4, 5 }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(1.0e+00,1.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
+        "Middle[rects={ [(3.0e+00,3.0e+00),(6.0e+00,6.0e+00)], [(1.0e+00,1.0e+00),(4.0e+00,4.0e+00)] }, children={ " ++
+        "Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 4, 5 }], " ++
+        "Leaf[rects={ [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 7, 6 }] }], " ++
+        "Middle[rects={ [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ " ++
+        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], " ++
+        "Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }] }]]");
 
     try tree.insert(8, Rect.init(0, 0, 2, 2));
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(0.0e+00,0.0e+00),(4.0e+00,4.0e+00)], [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)], [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)] }, ids={ 7, 6, 8 }], " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }], " ++
-        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 3, 4, 5 }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(0.0e+00,0.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(1.0e+01,1.0e+01)] }, children={ Middle[rects={ [(0.0e+00,0.0e+00),(6.0e+00,6.0e+00)], [(1.0e+00,1.0e+00),(4.0e+00,4.0e+00)] }, children={ Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)] }, ids={ 4, 5, 8 }], Leaf[rects={ [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 7, 6 }] }], Middle[rects={ [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }] }]]");
 
     try tree.insert(9, Rect.init(-1, -1, 1, 1));
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-1.0e+00,-1.0e+00),(4.0e+00,4.0e+00)], [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)], [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)], [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)] }, ids={ 7, 6, 8, 9 }], " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }], " ++
-        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 3, 4, 5 }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-1.0e+00,-1.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(1.0e+01,1.0e+01)] }, children={ Middle[rects={ [(-1.0e+00,-1.0e+00),(2.0e+00,2.0e+00)], [(1.0e+00,1.0e+00),(4.0e+00,4.0e+00)], [(3.0e+00,3.0e+00),(6.0e+00,6.0e+00)] }, children={ Leaf[rects={ [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)] }, ids={ 9, 8 }], Leaf[rects={ [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 7, 6 }], Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 4, 5 }] }], Middle[rects={ [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }] }]]");
 
     try tree.insert(10, Rect.init(-2, -2, 0, 0));
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-2.0e+00,-2.0e+00),(4.0e+00,4.0e+00)], [(3.0e+00,3.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
-        ("Middle[rects={ [(0.0e+00,0.0e+00),(4.0e+00,4.0e+00)], [(-2.0e+00,-2.0e+00),(1.0e+00,1.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)], [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)] }, ids={ 6, 7, 8 }], " ++
-        "Leaf[rects={ [(-2.0e+00,-2.0e+00),(0.0e+00,0.0e+00)], [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)] }, ids={ 10, 9 }] }], ") ++
-        ("Middle[rects={ [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)], [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }], " ++
-        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 3, 4, 5 }] }]") ++
-        " }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-2.0e+00,-2.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(1.0e+01,1.0e+01)] }, children={ Middle[rects={ [(-2.0e+00,-2.0e+00),(2.0e+00,2.0e+00)], [(1.0e+00,1.0e+00),(4.0e+00,4.0e+00)], [(3.0e+00,3.0e+00),(6.0e+00,6.0e+00)] }, children={ Leaf[rects={ [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)], [(-2.0e+00,-2.0e+00),(0.0e+00,0.0e+00)] }, ids={ 9, 8, 10 }], Leaf[rects={ [(1.0e+00,1.0e+00),(3.0e+00,3.0e+00)], [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 7, 6 }], Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 4, 5 }] }], Middle[rects={ [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }] }]]");
 
     var collector: struct {
         ids: std.ArrayList(u16) = std.ArrayList(u16).init(std.testing.allocator),
@@ -471,34 +480,20 @@ test "rtree" {
     defer collector.deinit();
 
     try tree.findIntersect(Rect.init(0, 0, 2, 2), @TypeOf(collector), &collector, @TypeOf(collector).callback);
-    try std.testing.expectEqualSlices(u16, &[_]u16{ 6, 7, 8, 10, 9 }, collector.ids.items);
+    try std.testing.expectEqualSlices(u16, &[_]u16{ 9, 8, 10, 7, 6 }, collector.ids.items);
 
     collector.ids.clearRetainingCapacity();
     try tree.findPoint(.{ .x = 0, .y = 0 }, @TypeOf(collector), &collector, @TypeOf(collector).callback);
-    try std.testing.expectEqualSlices(u16, &[_]u16{ 8, 10, 9 }, collector.ids.items);
+    try std.testing.expectEqualSlices(u16, &[_]u16{ 9, 8, 10 }, collector.ids.items);
 
     tree.delete(7);
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-2.0e+00,-2.0e+00),(4.0e+00,4.0e+00)], [(3.0e+00,3.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
-        "Middle[rects={ [(0.0e+00,0.0e+00),(4.0e+00,4.0e+00)], [(-2.0e+00,-2.0e+00),(1.0e+00,1.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)] }, ids={ 6, 8 }], " ++
-        "Leaf[rects={ [(-2.0e+00,-2.0e+00),(0.0e+00,0.0e+00)], [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)] }, ids={ 10, 9 }] }], " ++
-        "Middle[rects={ [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)], [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }], " ++
-        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 3, 4, 5 }] }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-2.0e+00,-2.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(1.0e+01,1.0e+01)] }, children={ Middle[rects={ [(-2.0e+00,-2.0e+00),(2.0e+00,2.0e+00)], [(1.0e+00,1.0e+00),(4.0e+00,4.0e+00)], [(3.0e+00,3.0e+00),(6.0e+00,6.0e+00)] }, children={ Leaf[rects={ [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)], [(0.0e+00,0.0e+00),(2.0e+00,2.0e+00)], [(-2.0e+00,-2.0e+00),(0.0e+00,0.0e+00)] }, ids={ 9, 8, 10 }], Leaf[rects={ [(2.0e+00,2.0e+00),(4.0e+00,4.0e+00)] }, ids={ 6 }], Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 4, 5 }] }], Middle[rects={ [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }] }]]");
 
     tree.delete(6);
     tree.delete(8);
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-2.0e+00,-2.0e+00),(4.0e+00,4.0e+00)], [(3.0e+00,3.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
-        "Middle[rects={ [(-2.0e+00,-2.0e+00),(1.0e+00,1.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(-2.0e+00,-2.0e+00),(0.0e+00,0.0e+00)], [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)] }, ids={ 10, 9 }] }], " ++
-        "Middle[rects={ [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)], [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }], " ++
-        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 3, 4, 5 }] }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-2.0e+00,-2.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(1.0e+01,1.0e+01)] }, children={ Middle[rects={ [(-2.0e+00,-2.0e+00),(2.0e+00,2.0e+00)], [(3.0e+00,3.0e+00),(6.0e+00,6.0e+00)] }, children={ Leaf[rects={ [(-1.0e+00,-1.0e+00),(1.0e+00,1.0e+00)], [(-2.0e+00,-2.0e+00),(0.0e+00,0.0e+00)] }, ids={ 9, 10 }], Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 4, 5 }] }], Middle[rects={ [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }] }]]");
 
     tree.delete(10);
     tree.delete(9);
-    try expectFormat(&tree, "RTree[root=Middle[rects={ [(3.0e+00,3.0e+00),(1.0e+01,1.0e+01)] }, children={ " ++
-        "Middle[rects={ [(6.0e+00,6.0e+00),(1.0e+01,1.0e+01)], [(3.0e+00,3.0e+00),(7.0e+00,7.0e+00)] }, children={ " ++
-        "Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)], [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)] }, ids={ 0, 1, 2 }], " ++
-        "Leaf[rects={ [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)], [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 3, 4, 5 }] }] }]]");
+    try expectFormat(&tree, "RTree[root=Middle[rects={ [(-2.0e+00,-2.0e+00),(6.0e+00,6.0e+00)], [(5.0e+00,5.0e+00),(1.0e+01,1.0e+01)] }, children={ Middle[rects={ [(3.0e+00,3.0e+00),(6.0e+00,6.0e+00)] }, children={ Leaf[rects={ [(4.0e+00,4.0e+00),(6.0e+00,6.0e+00)], [(3.0e+00,3.0e+00),(5.0e+00,5.0e+00)] }, ids={ 4, 5 }] }], Middle[rects={ [(7.0e+00,7.0e+00),(1.0e+01,1.0e+01)], [(5.0e+00,5.0e+00),(8.0e+00,8.0e+00)] }, children={ Leaf[rects={ [(8.0e+00,8.0e+00),(1.0e+01,1.0e+01)], [(7.0e+00,7.0e+00),(9.0e+00,9.0e+00)] }, ids={ 0, 1 }], Leaf[rects={ [(6.0e+00,6.0e+00),(8.0e+00,8.0e+00)], [(5.0e+00,5.0e+00),(7.0e+00,7.0e+00)] }, ids={ 2, 3 }] }] }]]");
 }

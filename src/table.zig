@@ -61,7 +61,7 @@ pub fn RTable(comptime Id: type, comptime maxId: Id) type {
     return struct {
         // RTable is dense since we expect almost every object to have bounds.
         const Set = DenseSet(Id, maxId, Rect);
-        const Tree = RTree(Id, maxId, 2000, 2000);
+        const Tree = RTree(Id, maxId, 2047, 2047, 16);
 
         pub const Entry = Set.Entry;
 
