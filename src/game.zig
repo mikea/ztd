@@ -418,11 +418,11 @@ pub const Game = struct {
         try self.updateDeleted();
 
         if (self.monsters.size() == 0) {
-            std.log.info("YOU WON!!!!\n", .{});
+            try std.io.getStdOut().writer().print("YOU WON!!!!\n", .{});
             std.c.exit(0);
         }
         if (self.towers.size() == 0) {
-            std.log.info("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
+            try std.io.getStdOut().writer().print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
             std.c.exit(0);
         }
 

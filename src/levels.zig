@@ -108,8 +108,10 @@ pub fn initLevel1(game: *Game) !void {
         while (i < size) {
             var j: usize = 0;
             while (j < size) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i * dist + 100), .y = @intToFloat(f32, j * dist + 100) }, 
-                 if (i == j) &data.RedMonster else &data.Orc);
+                try game.addMonster(.{
+                    .x = @intToFloat(f32, i * dist + 100) + 5 * rnd.random().floatNorm(f32),
+                    .y = @intToFloat(f32, j * dist + 100) + 5 * rnd.random().floatNorm(f32),
+                }, if (i == j) &data.RedMonster else &data.Orc);
                 j += 1;
             }
 
@@ -120,7 +122,7 @@ pub fn initLevel1(game: *Game) !void {
         while (i < 12) {
             var j: usize = 0;
             while (j < 12) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i * dist + 100 + size * dist), .y = @intToFloat(f32, j * dist + 100 + size * dist)}, &data.Orc);
+                try game.addMonster(.{ .x = @intToFloat(f32, i * dist + 100 + size * dist), .y = @intToFloat(f32, j * dist + 100 + size * dist) }, &data.Orc);
                 j += 1;
             }
 
@@ -144,7 +146,10 @@ pub fn initStress1(game: *Game) !void {
         while (i < size) {
             var j: usize = 0;
             while (j < size) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 200, .y = @intToFloat(f32, j) * dist + 200 }, &monster);
+                try game.addMonster(.{
+                    .x = @intToFloat(f32, i) * dist + 200 + 5 * rnd.random().floatNorm(f32),
+                    .y = @intToFloat(f32, j) * dist + 200 + 5 * rnd.random().floatNorm(f32),
+                }, &monster);
                 j += 1;
             }
 

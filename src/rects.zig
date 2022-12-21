@@ -173,7 +173,6 @@ pub fn Rects(comptime cap: usize, comptime blockSize: usize) type {
                 const bx: F = self.bx[offset..][0..blockSize].*;
                 const by: F = self.by[offset..][0..blockSize].*;
 
-                const area = (bx - ax) * (by - ay);
 
                 // r.add(rect)
 
@@ -189,15 +188,16 @@ pub fn Rects(comptime cap: usize, comptime blockSize: usize) type {
                 const bx1 = @select(f32, bx > rbx, bx, rbx);
                 const by1 = @select(f32, by > rby, by, rby);
 
-                const area1 = (bx1 - ax1) * (by1 - ay1);
-                const delta = area1 - area;
+                const perim = (bx - ax) + (by - ay);
+                const perim1 = (bx1 - ax1) + (by1 - ay1);
+                const delta = perim1 - perim;
 
                 var i: usize = 0;
-                while ( i < blockSize) : (i+=1) {
+                while (i < blockSize) : (i+=1) {
                     if (i + offset > self.len) {
                         break;
                     }
-                    std.debug.assert(delta[i] >= 0);
+                    // std.debug.assert(delta[i] >= 0);
                     if (delta[i] > minDelta) {
                         result = i + offset;
                         minDelta = delta[i];
