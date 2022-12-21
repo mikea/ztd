@@ -277,11 +277,6 @@ pub const Game = struct {
     }
 
     fn addSplashDamage(self: *Game, ticks: usize, pos: Vec, radius: f32, damage: f32, frameAllocator: std.mem.Allocator) !void {
-        // const c = try sdl.drawCircle(self.engine.renderer, radius, .{ .r = 1, .g = 0, .b = 0, .a = 0.5 }, .fill);
-        // try self.engine.sprites.set(i, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angle = 0, .z = .SPLASH_DAMAGE });
-        // try self.engine.animations.set(i, .{
-        //     .timed = .{ .endTicks = ticks + 300, .onComplete = .FREE_TEXTURE },
-        // });
         {
             const num = 50 + @floatToInt(u32, 20 * rnd.random().float(f32));
             const duration = 150;
@@ -292,7 +287,12 @@ pub const Game = struct {
                 const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
                 try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, sheet.w) / 4, @intToFloat(f32, sheet.h) / 4));
                 try self.engine.sprites.set(id, .{ .texture = sheet.texture, .src = .{ .x = 0, .y = 0, .w = sheet.w, .h = sheet.h }, .angleRad = angle + sheet.angleRad, .z = .PROJECTILE });
-                try self.engine.particles.set(id, .{ .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration)), .startTicks = ticks, .endTicks = ticks + duration, .onComplete = .DO_NOTHING });
+                try self.engine.particles.set(id, .{
+                    .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
+                    .startTicks = ticks,
+                    .endTicks = ticks + duration,
+                    .onComplete = .DO_NOTHING,
+                });
                 i += 1;
             }
         }
@@ -347,7 +347,12 @@ pub const Game = struct {
             .angleRad = 0,
             .z = .DAMAGE,
         });
-        try self.engine.particles.set(damageId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -20 }, .endTicks = ticks + 400, .onComplete = .FREE_TEXTURE });
+        try self.engine.particles.set(damageId, .{
+            .startTicks = ticks,
+            .v = .{ .x = 0, .y = -20 + rnd.random().floatNorm(f32) },
+            .endTicks = ticks + 400,
+            .onComplete = .FREE_TEXTURE,
+        });
     }
 
     fn updateDead(self: *Game, ticks: usize, frameAllocator: std.mem.Allocator) !void {
@@ -372,7 +377,12 @@ pub const Game = struct {
                         .angleRad = 0,
                         .z = .DAMAGE,
                     });
-                    try self.engine.particles.set(textId, .{ .startTicks = ticks, .v = .{ .x = 0, .y = -15 }, .endTicks = ticks + 600, .onComplete = .FREE_TEXTURE });
+                    try self.engine.particles.set(textId, .{
+                        .startTicks = ticks,
+                        .v = .{ .x = 0, .y = -15 + rnd.random().floatNorm(f32) },
+                        .endTicks = ticks + 600,
+                        .onComplete = .FREE_TEXTURE,
+                    });
                 }
             }
         }
@@ -412,7 +422,7 @@ pub const Game = struct {
             std.c.exit(0);
         }
         if (self.towers.size() == 0) {
-            std.debug.print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
+            std.log.info("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
             std.c.exit(0);
         }
 

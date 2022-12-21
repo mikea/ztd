@@ -133,6 +133,9 @@ pub fn initLevel1(game: *Game) !void {
 
 pub fn initStress1(game: *Game) !void {
     {
+        var monster = data.Orc;
+        monster.monster.speed = 100;
+
         // monsters
         const dist: f32 = 30;
         const size: usize = 700;
@@ -141,7 +144,7 @@ pub fn initStress1(game: *Game) !void {
         while (i < size) {
             var j: usize = 0;
             while (j < size) {
-                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 30, .y = @intToFloat(f32, j) * dist + 30 }, &data.Orc);
+                try game.addMonster(.{ .x = @intToFloat(f32, i) * dist + 200, .y = @intToFloat(f32, j) * dist + 200 }, &monster);
                 j += 1;
             }
 
