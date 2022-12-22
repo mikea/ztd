@@ -12,25 +12,26 @@ pub fn build(b: *std.build.Builder) void {
     exe.linkLibC(); // for cimports
 
     if (target.os_tag == std.Target.Os.Tag.windows) {
-        const sdl_path = "/home/mike/Packages/SDL2-2.26.1/";
+        // these are docker paths
+        const sdl_path = "/win/SDL2/";
         exe.addIncludePath(sdl_path ++ "include");
         exe.addLibraryPath(sdl_path ++ "lib/x64/");
         b.installBinFile(sdl_path ++ "lib/x64/SDL2.dll", "SDL2.dll");
         exe.linkSystemLibraryName("SDL2");
 
-        const sdl_ttf_path = "/home/mike/Packages/SDL2_ttf-2.20.1/";
+        const sdl_ttf_path = "/win/SDL2_ttf/";
         exe.addIncludePath(sdl_ttf_path ++ "include");
         exe.addLibraryPath(sdl_ttf_path ++ "lib/x64/");
         b.installBinFile(sdl_ttf_path ++ "lib/x64/SDL2_ttf.dll", "SDL2_ttf.dll");
         exe.linkSystemLibraryName("SDL2_ttf");
 
-        const sdl_image_path = "/home/mike/Packages/SDL2_image-2.6.2/";
+        const sdl_image_path = "/win/SDL2_image/";
         exe.addIncludePath(sdl_image_path ++ "include");
         exe.addLibraryPath(sdl_image_path ++ "lib/x64/");
         b.installBinFile(sdl_image_path ++ "lib/x64/SDL2_image.dll", "SDL2_image.dll");
         exe.linkSystemLibraryName("SDL2_image");
 
-        const cairo_path = "/home/mike/Packages/cairo-windows-1.17.2/";
+        const cairo_path = "/win/cairo/";
         exe.addIncludePath(cairo_path ++ "include");
         exe.addLibraryPath(cairo_path ++ "lib/x64/");
         b.installBinFile(cairo_path ++ "lib/x64/cairo.dll", "cairo.dll");

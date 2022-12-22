@@ -10,9 +10,9 @@ clean() {
 }
 
 dist() {
-    clean
-    zig build -Drelease-fast=true -Dtarget=x86_64-windows
-    (cd zig-out/bin && zip -r ztd.zip . && mv *.zip ../..)
+    docker build -t ztd .
+    mkdir -p release
+    docker run --rm -v $(pwd)/release:/out ztd /bin/sh -c "cp /work/*.zip /out"
 }
 
 case $1 in
