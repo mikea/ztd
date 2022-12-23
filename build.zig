@@ -36,6 +36,9 @@ pub fn build(b: *std.build.Builder) void {
         exe.addLibraryPath(cairo_path ++ "lib/x64/");
         b.installBinFile(cairo_path ++ "lib/x64/cairo.dll", "cairo.dll");
         exe.linkSystemLibraryName("cairo");
+    } else if (target.os_tag == std.Target.Os.Tag.macos) {
+        exe.addIncludePath("/mac/includes");
+        exe.addIncludePath("/mac/includes/SDL2");
     } else {
         exe.linkSystemLibrary("sdl2");
         exe.linkSystemLibrary("sdl2_ttf");
