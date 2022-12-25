@@ -1,15 +1,30 @@
 const std = @import("std");
 
+const main = "src/main_glfw.zig";
+
 pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
     b.installBinFile("README.md", "README.md");
 
-    const exe = b.addExecutable("ztd", "src/main.zig");
+    const exe = b.addExecutable("ztd", main);
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.linkLibC(); // for cimports
+
+    const cflags = [_][]const u8{};
+    exe.defineCMacro("IMGUI_IMPL_API", "extern \"C\"");
+    exe.addCSourceFile("lib/glad/glad.c", &cflags);
+    exe.addCSourceFile("lib/cimgui/cimgui.cpp", &cflags);
+    exe.addCSourceFile("lib/imgui-1.89.1/imgui.cpp", &cflags);
+    exe.addCSourceFile("lib/imgui-1.89.1/imgui_tables.cpp", &cflags);
+    exe.addCSourceFile("lib/imgui-1.89.1/imgui_widgets.cpp", &cflags);
+    exe.addCSourceFile("lib/imgui-1.89.1/imgui_demo.cpp", &cflags);
+    exe.addCSourceFile("lib/imgui-1.89.1/imgui_draw.cpp", &cflags);
+    exe.addCSourceFile("lib/imgui-1.89.1/backends/imgui_impl_opengl3.cpp", &cflags);
+    exe.addCSourceFile("lib/imgui-1.89.1/backends/imgui_impl_glfw.cpp", &cflags);
+    exe.linkLibCpp();
 
     if (target.os_tag == std.Target.Os.Tag.windows) {
         // these are docker paths
@@ -40,10 +55,9 @@ pub fn build(b: *std.build.Builder) void {
         exe.addIncludePath("/mac/includes");
         exe.addIncludePath("/mac/includes/SDL2");
     } else {
-        exe.linkSystemLibrary("sdl2");
-        exe.linkSystemLibrary("sdl2_ttf");
-        exe.linkSystemLibrary("sdl2_image");
-        exe.linkSystemLibrary("cairo");
+        exe.addIncludePath("lib/");
+        exe.addIncludePath("lib/imgui-1.89.1/");
+        exe.linkSystemLibraryName("glfw");
     }
 
     {
@@ -72,7 +86,7 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const exe_tests = b.addTest("src/main.zig");
+    const exe_tests = b.addTest(main);
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
 
