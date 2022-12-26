@@ -26,6 +26,8 @@ pub fn build(b: *std.build.Builder) void {
     exe.addCSourceFile("lib/imgui-1.89.1/backends/imgui_impl_glfw.cpp", &cflags);
     exe.linkLibCpp();
 
+    exe.addCSourceFile("lib/stb/stb.c", &cflags);
+
     if (target.os_tag == std.Target.Os.Tag.windows) {
         // these are docker paths
         const sdl_path = "/win/SDL2/";
