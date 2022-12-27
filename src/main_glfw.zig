@@ -1,18 +1,16 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const c = @cImport({
-    @cInclude("glad/glad.h");
-    @cInclude("GLFW/glfw3.h");
-});
+const gl = @import("gl.zig");
+const c = gl.c;
+const Resources = @import("resources.zig").Resources;
+const Engine = @import("engine.zig").Engine;
+const Game = @import("game.zig").Game;
+const levels = @import("levels.zig");
 
 const imgui = @cImport({
     @cInclude("stdlib.h");
     @cInclude("stdarg.h");
     @cInclude("cimgui/cimgui.h");
-});
-
-const stb = @cImport({
-    @cInclude("stb/stb_image.h");
 });
 
 const Error = error{ GenericError, NullPointer, ShaderError };
@@ -63,35 +61,17 @@ extern fn ImGui_ImplOpenGL3_NewFrame() void;
 extern fn ImGui_ImplGlfw_NewFrame() void;
 extern fn ImGui_ImplOpenGL3_RenderDrawData(data: *imgui.ImDrawData) void;
 
-pub fn compileShaderFile(comptime t: c.GLenum, comptime fileName: []const u8) !c.GLuint {
-    return compileShaderContent(t, @embedFile(fileName)) catch |err| {
-        std.log.err("Error while loading {s}", .{fileName});
-        return err;
-    };
-}
-
-pub fn compileShaderContent(t: c.GLenum, content: [*c]const u8) !c.GLuint {
-    const shader = c.glCreateShader(t);
-    c.glShaderSource(shader, 1, &content, null);
-    c.glCompileShader(shader);
-    try checkShaderStatus(shader, c.GL_COMPILE_STATUS);
-    return shader;
-}
-
-pub fn checkShaderStatus(shader: c.GLuint, status: c.GLenum) !void {
-    var success: c.GLint = 1;
-    c.glGetShaderiv(shader, status, &success);
-    if (success == 1) {
-        return;
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        const leaked = gpa.deinit();
+        if (leaked) @panic("Memory Leak Detected");
     }
 
-    var infoLog: [1024]u8 = undefined;
-    c.glGetShaderInfoLog(shader, infoLog.len, null, &infoLog);
-    std.log.err("GLSL ERROR: {} {s}", .{ c.glGetError(), @ptrCast([*:0]const u8, &infoLog) });
-    return Error.ShaderError;
-}
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
 
-pub fn main() !void {
     _ = c.glfwSetErrorCallback(onError);
     try checkCBool(c.glfwInit());
     defer c.glfwTerminate();
@@ -128,53 +108,69 @@ pub fn main() !void {
     // imgui.ImGui_StyleColorsDark(null);
 
     //
-    const vertexShader = try compileShaderFile(c.GL_VERTEX_SHADER, "vertex.glsl");
     // todo: delete after program linking
-    defer c.glDeleteShader(vertexShader);
-    const fragmentShader = try compileShaderFile(c.GL_FRAGMENT_SHADER, "fragment.glsl");
-    defer c.glDeleteShader(fragmentShader);
 
-    const shaderProgram = c.glCreateProgram();
-    c.glAttachShader(shaderProgram, vertexShader);
-    c.glAttachShader(shaderProgram, fragmentShader);
-    c.glLinkProgram(shaderProgram);
-    try checkShaderStatus(shaderProgram, c.GL_LINK_STATUS);
 
-    const vertices = [_]c.GLfloat{
-        // positions          // colors           // texture coords
-         0.5,  0.5, 0.0,   1.0, 0.0, 0.0,   1.0, 1.0, // top right
-         0.5, -0.5, 0.0,   0.0, 1.0, 0.0,   1.0, 0.0, // bottom right
-        -0.5, -0.5, 0.0,   0.0, 0.0, 1.0,   0.0, 0.0, // bottom left
-        -0.5,  0.5, 0.0,   1.0, 1.0, 0.0,   0.0, 1.0,  // top left 
-    };
-    const indices = [_]c.GLuint{
-        0, 1, 3, // first Triangle
-        1, 2, 3, // second Triangle
-    };
+    // const vertices = [_]c.GLfloat{
+    //     // positions          // colors           // texture coords
+    //      0.5,  0.5, 0.0,   1.0, 0.0, 0.0,   1.0, 1.0, // top right
+    //      0.5, -0.5, 0.0,   0.0, 1.0, 0.0,   1.0, 0.0, // bottom right
+    //     -0.5, -0.5, 0.0,   0.0, 0.0, 1.0,   0.0, 0.0, // bottom left
+    //     -0.5,  0.5, 0.0,   1.0, 1.0, 0.0,   0.0, 1.0,  // top left 
+    // };
+    // const indices = [_]c.GLuint{
+    //     0, 1, 3, // first Triangle
+    //     1, 2, 3, // second Triangle
+    // };
 
-    var vao: c.GLuint = 0;
-    c.glGenVertexArrays(1, &vao);
-    c.glBindVertexArray(vao);
+    // var vao: c.GLuint = 0;
+    // c.glGenVertexArrays(1, &vao);
+    // c.glBindVertexArray(vao);
 
-    var vbo: c.GLuint = 0;
-    c.glGenBuffers(1, &vbo);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
-    c.glBufferData(c.GL_ARRAY_BUFFER, vertices.len * @sizeOf(c.GLfloat), &vertices, c.GL_STATIC_DRAW);
+    // var vbo: c.GLuint = 0;
+    // c.glGenBuffers(1, &vbo);
+    // c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
+    // c.glBufferData(c.GL_ARRAY_BUFFER, vertices.len * @sizeOf(c.GLfloat), &vertices, c.GL_STATIC_DRAW);
 
-    var ebo: c.GLuint = 0;
-    c.glGenBuffers(1, &ebo);
-    c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, ebo);
-    c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, indices.len * @sizeOf(c.GLuint), &indices, c.GL_STATIC_DRAW);
+    // var ebo: c.GLuint = 0;
+    // c.glGenBuffers(1, &ebo);
+    // c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, ebo);
+    // c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, indices.len * @sizeOf(c.GLuint), &indices, c.GL_STATIC_DRAW);
     
-    // position attribute
-    c.glVertexAttribPointer(0, 3, c.GL_FLOAT, c.GL_FALSE, 8 * @sizeOf(c.GLfloat), null);
-    c.glEnableVertexAttribArray(0);
-    // color attribute
-    c.glVertexAttribPointer(1, 3, c.GL_FLOAT, c.GL_FALSE, 8 * @sizeOf(c.GLfloat), @intToPtr(*anyopaque, 3 * @sizeOf(c.GLfloat)));
-    c.glEnableVertexAttribArray(1);
-    // texture coord attribute
-    c.glVertexAttribPointer(2, 2, c.GL_FLOAT, c.GL_FALSE, 8 * @sizeOf(c.GLfloat), @intToPtr(*anyopaque, 6 * @sizeOf(c.GLfloat)));
-    c.glEnableVertexAttribArray(2);
+    // // position attribute
+    // c.glVertexAttribPointer(0, 3, c.GL_FLOAT, c.GL_FALSE, 8 * @sizeOf(c.GLfloat), null);
+    // c.glEnableVertexAttribArray(0);
+    // // color attribute
+    // c.glVertexAttribPointer(1, 3, c.GL_FLOAT, c.GL_FALSE, 8 * @sizeOf(c.GLfloat), @intToPtr(*anyopaque, 3 * @sizeOf(c.GLfloat)));
+    // c.glEnableVertexAttribArray(1);
+    // // texture coord attribute
+    // c.glVertexAttribPointer(2, 2, c.GL_FLOAT, c.GL_FALSE, 8 * @sizeOf(c.GLfloat), @intToPtr(*anyopaque, 6 * @sizeOf(c.GLfloat)));
+    // c.glEnableVertexAttribArray(2);
+
+
+    var resources = try Resources.init();
+    defer resources.deinit();
+
+    var engine = try Engine.init(allocator, window);
+    defer engine.deinit();
+
+    var game = try Game.init(allocator, &engine, &resources);
+    defer allocator.destroy(game);
+    defer game.deinit();
+
+    if (args.len >= 2) {
+        if (std.mem.eql(u8, args[1], "stress1")) {
+            try levels.initStress1(game);
+        } else if (std.mem.eql(u8, args[1], "level2")) {
+            try levels.initLevel2(game);
+        } else if (std.mem.eql(u8, args[1], "level3")) {
+            try levels.initLevel3(game, allocator);
+        } else {
+            try levels.initLevel1(game);
+        }
+    } else {
+        try levels.initLevel1(game);
+    }
 
 
     // c.glBindBuffer(c.GL_ARRAY_BUFFER, 0); 
@@ -183,33 +179,40 @@ pub fn main() !void {
 
     // todo: cleanup
 
-    // load and create texture
-    var x: c_int = 0;
-    var y: c_int = 0;
-    var ch: c_int = 0;
-    const img = stb.stbi_load("res/MiniWorldSprites/Characters/Monsters/Orcs/ArcherGoblin.png", &x, &y, &ch, 0);
-    std.log.debug("x: {} y: {} ch: {} img: {*}", .{ x, y, ch, img });
+    // // load and create texture
+    // var x: c_int = 0;
+    // var y: c_int = 0;
+    // var ch: c_int = 0;
+    // const img = stb.stbi_load("res/MiniWorldSprites/Characters/Monsters/Orcs/ArcherGoblin.png", &x, &y, &ch, 0);
+    // std.log.debug("x: {} y: {} ch: {} img: {*}", .{ x, y, ch, img });
 
-    var texture: c.GLuint = 0;
-    c.glGenTextures(1, &texture);
-    c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_REPEAT);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_REPEAT);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR_MIPMAP_LINEAR);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
-    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, x, y, 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, img);
-    c.glGenerateMipmap(c.GL_TEXTURE_2D);
-    stb.stbi_image_free(img);
+    // var texture: c.GLuint = 0;
+    // c.glGenTextures(1, &texture);
+    // c.glBindTexture(c.GL_TEXTURE_2D, texture);
+    // c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_REPEAT);
+    // c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_REPEAT);
+    // c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR_MIPMAP_LINEAR);
+    // c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
+    // c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, x, y, 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, img);
+    // c.glGenerateMipmap(c.GL_TEXTURE_2D);
+    // stb.stbi_image_free(img);
 
 
 
     // wireframe
-    // c.glPolygonMode(c.GL_FRONT_AND_BACK, c.GL_LINE);
+    gl.c.glPolygonMode(gl.c.GL_FRONT_AND_BACK, gl.c.GL_LINE);
 
     // std.log.debug("DisplaySize: {}", .{io.*.DisplaySize});
     _ = c.glfwSetKeyCallback(window, onKey);
     while (c.glfwWindowShouldClose(window) == 0) {
+        const ticks = @intCast(u64,std.time.milliTimestamp());
         c.glfwPollEvents();
+
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+        const frameAllocator = arena.allocator();
+
+        try game.update(frameAllocator, ticks);
 
         // ImGui_ImplOpenGL3_NewFrame();
         // ImGui_ImplGlfw_NewFrame();
@@ -218,16 +221,17 @@ pub fn main() !void {
 
         // c.glfwMakeContextCurrent(window);
         // c.glViewport(0, 0, @floatToInt(c_int, io.*.DisplaySize.x), @floatToInt(c_int, io.*.DisplaySize.y));
-        c.glClearColor(0.45, 0.55, 0.60, 1.0);
-        c.glClear(c.GL_COLOR_BUFFER_BIT);
 
-        c.glBindTexture(c.GL_TEXTURE_2D, texture);
-        c.glUseProgram(shaderProgram);
-        c.glBindVertexArray(vao);
-        c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
-        c.glBindVertexArray(0);
+        // c.glBindTexture(c.GL_TEXTURE_2D, texture);
+        // c.glUseProgram(shaderProgram);
+        // c.glBindVertexArray(vao);
+        // c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
+        // c.glBindVertexArray(0);
 
         // ImGui_ImplOpenGL3_RenderDrawData(imgui.ImGui_GetDrawData());
+
+        try engine.render();
+        try game.render();
 
         c.glfwSwapBuffers(window);
     }

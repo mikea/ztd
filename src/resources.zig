@@ -1,7 +1,5 @@
 const std = @import("std");
-const sdl = @import("sdl.zig");
-const checkNotNull = sdl.checkNotNull;
-const checkInt = sdl.checkInt;
+const gl = @import("gl.zig");
 
 pub const SpriteSheets = enum {
     ARCHER_GOBLIN,
@@ -23,19 +21,19 @@ pub const SpriteSheets = enum {
 pub const Resources = struct {
     const sheetSize = @typeInfo(SpriteSheets).Enum.fields.len;
 
-    sheets: [sheetSize]sdl.SpriteSheet,
-    rubik20: *sdl.c.TTF_Font,
-    rubik8: *sdl.c.TTF_Font,
+    sheets: [sheetSize]gl.SpriteSheet,
+    // rubik20: *sdl.c.TTF_Font,
+    // rubik8: *sdl.c.TTF_Font,
 
-    pub fn init(renderer: *sdl.Renderer, ) !Resources {
-        var sheets: [sheetSize]sdl.SpriteSheet = undefined;
+    pub fn init() !Resources {
+        var sheets: [sheetSize]gl.SpriteSheet = undefined;
         for (sheets) |_,i| {
-            sheets[i] = try loadSheet(renderer, @intToEnum(SpriteSheets, i));
+            sheets[i] = try loadSheet(@intToEnum(SpriteSheets, i));
         }
         return .{
             .sheets = sheets,
-            .rubik20 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
-            .rubik8 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 8)),
+            // .rubik20 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
+            // .rubik8 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 8)),
         };
     }
 
@@ -43,27 +41,28 @@ pub const Resources = struct {
         for (self.sheets) |*sheet| {
             sheet.deinit();
         }
-        sdl.c.TTF_CloseFont(self.rubik20);
-        sdl.c.TTF_CloseFont(self.rubik8);
+        // sdl.c.TTF_CloseFont(self.rubik20);
+        // sdl.c.TTF_CloseFont(self.rubik8);
     }
 
-    pub fn getSheet(self: *@This(), sheet: SpriteSheets) *const sdl.SpriteSheet {
+    pub fn getSheet(self: *@This(), sheet: SpriteSheets) *const gl.SpriteSheet {
         return &self.sheets[@enumToInt(sheet)];
     } 
 };
 
-pub fn loadSheet(renderer: *sdl.Renderer, sheet: SpriteSheets) !sdl.SpriteSheet {
+pub fn loadSheet(sheet: SpriteSheets) !gl.SpriteSheet {
     const pi2 = comptime(std.math.pi / 2.0);
     return switch (sheet) {
-        SpriteSheets.ARCHER_GOBLIN => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Orcs/ArcherGoblin.png", 16, 16, 0),
-        SpriteSheets.ORC => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Orcs/Orc.png", 16, 16, 0),
-        SpriteSheets.RED_DEMON => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16, 0),
-        SpriteSheets.WOOD_KEEP => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Keep.png", 32, 32, 0),
-        SpriteSheets.WOOD_TOWER => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16, 0),
-        SpriteSheets.WOOD_TOWER2 => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Buildings/Wood/Tower2.png", 16, 16, 0),
-        SpriteSheets.FIREBALL_PROJECTILE => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16, -pi2),
-        SpriteSheets.SHORT_ARROW => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/ArrowShort.png", 16, 16, -pi2),
-        SpriteSheets.LONG_ARROW => try sdl.SpriteSheet.load(renderer, "res/MiniWorldSprites/Objects/ArrowLong.png", 16, 16, -pi2),
-        SpriteSheets.FLAME_PARTICLE => try sdl.SpriteSheet.load(renderer, "res/particles/flame_06.png", 13, 15, 0),
+        SpriteSheets.ARCHER_GOBLIN => try gl.SpriteSheet.load("res/MiniWorldSprites/Characters/Monsters/Orcs/ArcherGoblin.png", 16, 16, 0),
+        SpriteSheets.ORC => try gl.SpriteSheet.load("res/MiniWorldSprites/Characters/Monsters/Orcs/Orc.png", 16, 16, 0),
+        SpriteSheets.RED_DEMON => try gl.SpriteSheet.load("res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16, 0),
+        SpriteSheets.WOOD_KEEP => try gl.SpriteSheet.load("res/MiniWorldSprites/Buildings/Wood/Keep.png", 32, 32, 0),
+        SpriteSheets.WOOD_TOWER => try gl.SpriteSheet.load("res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16, 0),
+        SpriteSheets.WOOD_TOWER2 => try gl.SpriteSheet.load("res/MiniWorldSprites/Buildings/Wood/Tower2.png", 16, 16, 0),
+        SpriteSheets.FIREBALL_PROJECTILE => try gl.SpriteSheet.load("res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16, -pi2),
+        SpriteSheets.SHORT_ARROW => try gl.SpriteSheet.load("res/MiniWorldSprites/Objects/ArrowShort.png", 16, 16, -pi2),
+        SpriteSheets.LONG_ARROW => try gl.SpriteSheet.load("res/MiniWorldSprites/Objects/ArrowLong.png", 16, 16, -pi2),
+        SpriteSheets.FLAME_PARTICLE => try gl.SpriteSheet.load("res/particles/flame_06.png", 13, 15, 0),
     };
 }
+

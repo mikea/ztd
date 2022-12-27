@@ -62,21 +62,6 @@ pub fn build(b: *std.build.Builder) void {
         exe.linkSystemLibraryName("glfw");
     }
 
-    {
-        const options = b.addOptions();
-        exe.addOptions("build_options", options);
-        options.addOption([]const u8, "content_dir", "res/");
-    }
-
-    {
-        // install content
-        const installStep = b.addInstallDirectory(.{
-            .source_dir = "res",
-            .install_dir = .{ .custom = "" },
-            .install_subdir = "bin/res",
-        });
-        exe.step.dependOn(&installStep.step);
-    }
     exe.install();
 
     const run_cmd = exe.run();

@@ -6,7 +6,6 @@ const Vec = geom.Vec;
 
 const Game = @import("game.zig").Game;
 
-const sdl = @import("sdl.zig");
 const data = @import("data.zig");
 
 const RndGen = std.rand.DefaultPrng;

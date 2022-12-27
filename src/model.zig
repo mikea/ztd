@@ -1,7 +1,8 @@
 const resources = @import("resources.zig");
-const sdl = @import("sdl.zig");
 const table = @import("table.zig");
+const gl = @import("gl.zig");
 const Vec = @import("geom.zig").Vec;
+const Rect = @import("geom.zig").Rect;
 
 pub const Id = u32;
 pub const maxId: usize = 1 << 19;
@@ -64,11 +65,11 @@ pub const AttackersTable = table.Table(Id, maxId, Attacker);
 pub const SpriteCoords = struct { x: u8, y: u8 };
 
 pub const Animation = struct {
-    sheet: *const sdl.SpriteSheet,
+    sheet: *const gl.SpriteSheet,
     coords: []const SpriteCoords,
     animationDelay: u32,
     z: Layer,
-    i: usize = 0,
+    i: u64 = 0,
 };
 
 pub const Navigation = union(enum) {
@@ -97,8 +98,8 @@ pub const Layer = enum {
 };
 
 pub const Sprite = struct {
-    texture: *sdl.c.SDL_Texture,
-    src: sdl.c.SDL_Rect,
+    texture: gl.c.GLuint,
+    src: Rect,
     angleRad: f64,
     z: Layer,
 };

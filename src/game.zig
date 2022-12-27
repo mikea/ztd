@@ -1,9 +1,8 @@
 const std = @import("std");
 const engine = @import("engine.zig");
-const sdl = @import("sdl.zig");
 const resources = @import("resources.zig");
 const data = @import("data.zig");
-const ui = @import("ui.zig");
+// const ui = @import("ui.zig");
 const builtin = @import("builtin");
 
 const table = @import("table.zig");
@@ -24,18 +23,18 @@ pub const Game = struct {
     engine: *engine.Engine,
     resources: *resources.Resources,
 
-    lastTicks: usize = 0,
-    frame: usize = 0,
+    lastTicks: u64 = 0,
+    frame: u64 = 0,
 
     attackers: model.AttackersTable,
     projectiles: model.ProjectilesTable,
     towers: model.TowersTable,
     monsters: model.MonstersTable,
 
-    ui: ui.UI = undefined,
+    // ui: ui.UI = undefined,
     towersUpdated: bool = false,
-    money: usize = 10,
-    towerPrice: usize = 10,
+    money: u64 = 10,
+    towerPrice: u64 = 10,
 
     pub fn init(allocator: std.mem.Allocator, eng: *engine.Engine, res: *resources.Resources) !*Game {
         var game = try allocator.create(Game);
@@ -47,7 +46,7 @@ pub const Game = struct {
             .monsters = try model.MonstersTable.init(allocator),
             .projectiles = try model.ProjectilesTable.init(allocator),
         };
-        game.ui = try ui.UI.init(allocator, game);
+        // game.ui = try ui.UI.init(allocator, game);
         return game;
     }
 
@@ -56,7 +55,7 @@ pub const Game = struct {
         self.towers.deinit();
         self.projectiles.deinit();
         self.attackers.deinit();
-        self.ui.deinit();
+        // self.ui.deinit();
     }
 
     fn delete(self: *Game, id: Id) !void {
@@ -96,9 +95,9 @@ pub const Game = struct {
         self.towersUpdated = true;
     }
 
-    pub fn event(self: *Game, e: *const sdl.Event) !void {
-        try self.ui.event(e);
-    }
+    // pub fn event(self: *Game, e: *const sdl.Event) !void {
+    //     try self.ui.event(e);
+    // }
 
     fn updateTowerTargets(self: *Game) !void {
         // update closest monsters
@@ -177,7 +176,7 @@ pub const Game = struct {
         try self.updateTowerTargets();
     }
 
-    fn updateAttackers(self: *Game, ticks: usize, frameAllocator: std.mem.Allocator) !void {
+    fn updateAttackers(self: *Game, ticks: u64, frameAllocator: std.mem.Allocator) !void {
         var it = self.attackers.iterator();
         while (it.next()) |entry| {
             const pos = (self.engine.bounds.get(entry.id)).center();
@@ -223,12 +222,12 @@ pub const Game = struct {
             .FOLLOW => .{ .target = attacker.target },
         };
         const sheet = self.resources.getSheet(projectile.sheet);
-        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.angleRad });
+        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.angle });
         try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
         try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
     }
 
-    fn updateProjectiles(self: *Game, ticks: usize, dt: f32, frameAllocator: std.mem.Allocator) !void {
+    fn updateProjectiles(self: *Game, ticks: u64, dt: f32, frameAllocator: std.mem.Allocator) !void {
         {
             // move projectiles
             var it = self.projectiles.iterator();
@@ -276,24 +275,27 @@ pub const Game = struct {
         try self.updateDeleted();
     }
 
-    fn addSplashDamage(self: *Game, ticks: usize, pos: Vec, radius: f32, damage: f32, frameAllocator: std.mem.Allocator) !void {
+    fn addSplashDamage(self: *Game, ticks: u64, pos: Vec, radius: f32, damage: f32, frameAllocator: std.mem.Allocator) !void {
         {
             const num = 50 + @floatToInt(u32, 20 * rnd.random().float(f32));
             const duration = 150;
             var i: u32 = 0;
             while (i < num) {
                 const angle: f32 = 2 * std.math.pi * rnd.random().float(f32);
-                const id = self.engine.ids.nextId();
-                const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
-                try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, sheet.w) / 4, @intToFloat(f32, sheet.h) / 4));
-                try self.engine.sprites.set(id, .{ .texture = sheet.texture, .src = .{ .x = 0, .y = 0, .w = sheet.w, .h = sheet.h }, .angleRad = angle + sheet.angleRad, .z = .PROJECTILE });
-                try self.engine.particles.set(id, .{
-                    .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
-                    .startTicks = ticks,
-                    .endTicks = ticks + duration,
-                    .onComplete = .DO_NOTHING,
-                });
-                i += 1;
+                // const id = self.engine.ids.nextId();
+                // const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
+                // try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, sheet.w) / 4, @intToFloat(f32, sheet.h) / 4));
+                // try self.engine.sprites.set(id, .{ .texture = sheet.texture, .src = .{ .x = 0, .y = 0, .w = sheet.w, .h = sheet.h }, .angleRad = angle + sheet.angleRad, .z = .PROJECTILE });
+                // try self.engine.particles.set(id, .{
+                //     .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
+                //     .startTicks = ticks,
+                //     .endTicks = ticks + duration,
+                //     .onComplete = .DO_NOTHING,
+                // });
+                // i += 1;
+                _ = angle;
+                _ = duration;
+                @panic("not implemented");
             }
         }
 
@@ -327,35 +329,38 @@ pub const Game = struct {
         }
     }
 
-    fn addDamage(self: *Game, ticks: usize, id: Id, damage: f32, wasDelayed: enum { DELAYED, NOT_DELAYED }, frameAllocator: std.mem.Allocator) !void {
+    fn addDamage(self: *Game, ticks: u64, id: Id, damage: f32, wasDelayed: enum { DELAYED, NOT_DELAYED }, frameAllocator: std.mem.Allocator) !void {
         const health = self.engine.healths.get(id);
         health.*.health -= damage;
         if (wasDelayed == .DELAYED) {
             health.*.futureDamage -= damage;
             std.debug.assert(health.futureDamage >= 0);
         }
-        const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(i64, damage)});
-        const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 179, .g = 14, .b = 8, .a = 255 });
-        const bounds = self.engine.bounds.get(id);
-        const pos = bounds.center();
-        const damageId = self.engine.ids.nextId();
+        const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(u64, damage)});
+        // const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 179, .g = 14, .b = 8, .a = 255 });
+        // const bounds = self.engine.bounds.get(id);
+        // const pos = bounds.center();
+        // const damageId = self.engine.ids.nextId();
 
-        try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w, texture.h).scale(0.75)));
-        try self.engine.sprites.set(damageId, .{
-            .texture = texture.texture,
-            .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
-            .angleRad = 0,
-            .z = .DAMAGE,
-        });
-        try self.engine.particles.set(damageId, .{
-            .startTicks = ticks,
-            .v = .{ .x = 0, .y = -20 + rnd.random().floatNorm(f32) },
-            .endTicks = ticks + 400,
-            .onComplete = .FREE_TEXTURE,
-        });
+        // try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w, texture.h).scale(0.75)));
+        // try self.engine.sprites.set(damageId, .{
+        //     .texture = texture.texture,
+        //     .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
+        //     .angleRad = 0,
+        //     .z = .DAMAGE,
+        // });
+        // try self.engine.particles.set(damageId, .{
+        //     .startTicks = ticks,
+        //     .v = .{ .x = 0, .y = -20 + rnd.random().floatNorm(f32) },
+        //     .endTicks = ticks + 400,
+        //     .onComplete = .FREE_TEXTURE,
+        // });
+        _ = text;
+        _ = ticks;
+        // @panic("not implemented");
     }
 
-    fn updateDead(self: *Game, ticks: usize, frameAllocator: std.mem.Allocator) !void {
+    fn updateDead(self: *Game, ticks: u64, frameAllocator: std.mem.Allocator) !void {
         // remove 0 health
         var it = self.engine.healths.iterator();
         while (it.next()) |entry| {
@@ -365,24 +370,27 @@ pub const Game = struct {
                     self.money += monster.*.price;
 
                     const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{monster.*.price});
-                    const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 255, .g = 215, .b = 0, .a = 255 });
-                    const bounds = self.engine.bounds.get(entry.id);
-                    const pos = bounds.center();
-                    const textId = self.engine.ids.nextId();
+                    // const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 255, .g = 215, .b = 0, .a = 255 });
+                    // const bounds = self.engine.bounds.get(entry.id);
+                    // const pos = bounds.center();
+                    // const textId = self.engine.ids.nextId();
 
-                    try self.engine.bounds.set(textId, Rect.centered(pos, Vec.initInt(texture.w, texture.h)));
-                    try self.engine.sprites.set(textId, .{
-                        .texture = texture.texture,
-                        .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
-                        .angleRad = 0,
-                        .z = .DAMAGE,
-                    });
-                    try self.engine.particles.set(textId, .{
-                        .startTicks = ticks,
-                        .v = .{ .x = 0, .y = -15 + rnd.random().floatNorm(f32) },
-                        .endTicks = ticks + 600,
-                        .onComplete = .FREE_TEXTURE,
-                    });
+                    // try self.engine.bounds.set(textId, Rect.centered(pos, Vec.initInt(texture.w, texture.h)));
+                    // try self.engine.sprites.set(textId, .{
+                    //     .texture = texture.texture,
+                    //     .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
+                    //     .angleRad = 0,
+                    //     .z = .DAMAGE,
+                    // });
+                    // try self.engine.particles.set(textId, .{
+                    //     .startTicks = ticks,
+                    //     .v = .{ .x = 0, .y = -15 + rnd.random().floatNorm(f32) },
+                    //     .endTicks = ticks + 600,
+                    //     .onComplete = .FREE_TEXTURE,
+                    // });
+                    _ = text;
+                    _ = ticks;
+                    // @panic("not implemented");
                 }
             }
         }
@@ -398,7 +406,7 @@ pub const Game = struct {
         self.engine.toDelete.clear();
     }
 
-    pub fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: usize) !void {
+    pub fn update(self: *Game, frameAllocator: std.mem.Allocator, ticks: u64) !void {
         if (self.lastTicks == 0) {
             self.lastTicks = ticks;
             return;
@@ -417,16 +425,16 @@ pub const Game = struct {
         try self.engine.updateAnimations(ticks);
         try self.updateDeleted();
 
-        if (self.monsters.size() == 0) {
-            try std.io.getStdOut().writer().print("YOU WON!!!!\n", .{});
-            std.c.exit(0);
-        }
-        if (self.towers.size() == 0) {
-            try std.io.getStdOut().writer().print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
-            std.c.exit(0);
-        }
+        // if (self.monsters.size() == 0) {
+        //     try std.io.getStdOut().writer().print("YOU WON!!!!\n", .{});
+        //     std.c.exit(0);
+        // }
+        // if (self.towers.size() == 0) {
+        //     try std.io.getStdOut().writer().print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
+        //     std.c.exit(0);
+        // }
 
-        try self.ui.update(frameAllocator);
+        // try self.ui.update(frameAllocator);
 
         // if (builtin.mode == .Debug and self.frame % 100 == 0) {
         //     self.engine.bounds.tree.checkConsistency();
