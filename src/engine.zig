@@ -12,6 +12,7 @@ const Vec = geom.Vec;
 const Rect = geom.Rect;
 
 const SparseSet = @import("sparse_set.zig").SparseSet;
+const Viewport = @import("viewport.zig").Viewport;
 
 pub const IdManager = struct {
     i: Id = 0,
@@ -73,16 +74,10 @@ pub const Engine = struct {
     renderedSprites: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, window: *gl.c.GLFWwindow) !Engine {
-        var viewport: [4]gl.c.GLint = undefined;
-        gl.c.glGetIntegerv(gl.c.GL_VIEWPORT, &viewport);
-        std.log.debug("viewport: {any}", .{viewport});
-
-        const displaySize = Vec{ .x = @intToFloat(f32, viewport[2]), .y = @intToFloat(f32, viewport[3]) };
-
         return .{
             .window = window,
             .ids = try IdManager.init(allocator),
-            .viewport = Viewport.init(displaySize),
+            .viewport = Viewport.init(window),
             .spriteRenderer = try sprites.SpriteRenderer.init(),
             .toDelete = try SparseSet(Id, maxId, void).init(allocator),
             .bounds = try BoundsTable.init(allocator),
@@ -137,6 +132,10 @@ pub const Engine = struct {
     //     return null;
     // }
 
+    pub fn onEvent(self: *Engine, event: *const gl.Event) void {
+        self.viewport.onEvent(event);
+    }
+
     pub fn updateAnimations(self: *Engine, ticks: u64) !void {
         if (self.viewport.view.height() > 5000) {
             // do not update animation when zoomed out too much
@@ -180,20 +179,16 @@ pub const Engine = struct {
     }
 
     pub fn render(self: *Engine) !void {
-        var displayWidth: gl.c.GLint = 0;
-        var displayHeight: gl.c.GLint = 0;
-        gl.c.glfwGetFramebufferSize(self.window, &displayWidth, &displayHeight);
-        self.viewport.displaySize = Vec.initInt(displayWidth, displayHeight);
-
         gl.c.glClearColor(1.0, 1.0, 1.0, 1.0);
         gl.c.glClear(gl.c.GL_COLOR_BUFFER_BIT);
 
+        self.viewport.update();
         try self.renderSprites();
     }
 
     fn renderSprites(self: *Engine) !void {
         self.renderedSprites = 0;
-        self.spriteRenderer.startFrame(self.viewport.displaySize);
+        self.spriteRenderer.startFrame(&self.viewport);
         for (std.enums.values(model.Layer)) |layer| {
             var renderer: struct {
                 engine: *Engine,
@@ -205,8 +200,8 @@ pub const Engine = struct {
                             return;
                         }
                         s.engine.renderedSprites += 1;
-                        const destRect = s.engine.viewport.toScreen(rect);
-                        s.engine.spriteRenderer.renderSprite(sprite, &destRect);
+                        // const destRect = s.engine.viewport.toScreen(rect);
+                        s.engine.spriteRenderer.renderSprite(sprite, &rect);
                         // checkInt(sdl.c.SDL_RenderCopyEx(s.engine.renderer, sprite.texture, &sprite.src, &destRect, 360 * sprite.angleRad / (2 * std.math.pi), null, sdl.c.SDL_FLIP_NONE));
 
                         if (s.engine.healths.find(id)) |health| {
@@ -217,10 +212,10 @@ pub const Engine = struct {
                                     .a = .{ .x = rect.a.x, .y = rect.b.y },
                                     .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1 },
                                 };
-                                const destHealthRect = s.engine.viewport.toScreen(healthRect);
+                                // const destHealthRect = s.engine.viewport.toScreen(healthRect);
                                 // checkInt(sdl.c.SDL_SetRenderDrawColor(s.engine.renderer, 0, 255, 0, 255));
                                 // checkInt(sdl.c.SDL_RenderFillRect(s.engine.renderer, &destHealthRect));
-                                _ = destHealthRect;
+                                _ = healthRect;
                             }
                         }
                     }
@@ -270,79 +265,5 @@ pub const Engine = struct {
     //         Alignment.RIGHT => pos.minus(.{ .x = w, .y = 0 }),
     //     };
     //     try self.texts.set(id, .{ .surface = surface, .pos = alignedPos, .alignment = alignment, .texture = null });
-    // }
-};
-
-const Viewport = struct {
-    displaySize: Vec,
-    screen: Rect,
-    view: Rect,
-
-    // lower left corner translation, computed from view and screen on every view update
-    translation: Vec,
-    // computed from view and screen on every view update
-    scale: f32,
-
-    pub fn init(displaySize: Vec) Viewport {
-        // initially 1000 wide, centered on origin
-        const w = 1000;
-        const h = w * displaySize.y / displaySize.x;
-        const view = Rect{ .a = .{ .x = -w / 2, .y = -h / 2 }, .b = .{ .x = w / 2, .y = h / 2 } };
-        const screen = Rect.initSized(.{ .x = 0, .y = 0 }, displaySize);
-
-        return .{ .displaySize = displaySize, .screen = screen, .view = view, .translation = screen.a.minus(view.a), .scale = screen.size().x / view.size().x };
-    }
-
-    pub fn screenToGame(self: *const Viewport, screenPos: Vec) Vec {
-        const norm = screenPos.ratio(self.displaySize);
-        return self.view.a.add(self.view.size().mul(norm));
-    }
-
-    pub fn toScreen(self: *const Viewport, rect: Rect) Rect {
-        const a = Vec{
-            .x = (rect.a.x + self.translation.x) * self.scale,
-            .y = (rect.a.y + self.translation.y) * self.scale,
-        };
-        const size = rect.size().scale(self.scale);
-
-        return Rect.initSized(a, size);
-    }
-
-    // pub fn onEvent(self: *Viewport, event: *sdl.c.SDL_Event) void {
-    //     const delta = self.view.height() / 10.0;
-    //     const mouseZoom = 1.1;
-    //     const kbdZoom = 1.7;
-
-    //     switch (event.type) {
-    //         sdl.c.SDL_KEYDOWN => switch (event.key.keysym.sym) {
-    //             sdl.c.SDLK_UP => {
-    //                 self.view = self.view.translate(.{ .x = 0, .y = -delta });
-    //             },
-    //             sdl.c.SDLK_DOWN => {
-    //                 self.view = self.view.translate(.{ .x = 0, .y = delta });
-    //             },
-    //             sdl.c.SDLK_LEFT => {
-    //                 self.view = self.view.translate(.{ .x = -delta, .y = 0 });
-    //             },
-    //             sdl.c.SDLK_RIGHT => {
-    //                 self.view = self.view.translate(.{ .x = delta, .y = 0 });
-    //             },
-    //             sdl.c.SDLK_PAGEUP => {
-    //                 self.view = Rect.centered(self.view.center(), self.view.size().scale(kbdZoom));
-    //             },
-    //             sdl.c.SDLK_PAGEDOWN => {
-    //                 self.view = Rect.centered(self.view.center(), self.view.size().scale(1.0 / kbdZoom));
-    //             },
-    //             else => {},
-    //         },
-    //         sdl.c.SDL_MOUSEWHEEL => {
-    //             const z: f32 = if (event.wheel.y > 0) mouseZoom else 1.0 / mouseZoom;
-    //             self.view = Rect.centered(self.view.center(), self.view.size().scale(z));
-    //         },
-    //         else => {},
-    //     }
-
-    //     self.translation = self.screen.a.minus(self.view.a);
-    //     self.scale = self.screen.size().x / self.view.size().x;
     // }
 };

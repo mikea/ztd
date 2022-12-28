@@ -1,68 +1,113 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+const utils = @import("utils.zig");
+const geom = @import("geom.zig");
+const Vec = geom.Vec;
+const Rect = geom.Rect;
+
 pub const c = @cImport({
     @cInclude("glad/glad.h");
     @cInclude("GLFW/glfw3.h");
 });
-const stb = @cImport({
-    @cInclude("stb/stb_image.h");
-});
-const model = @import("model.zig");
-const Rect = @import("geom.zig").Rect;
-const Vec = @import("geom.zig").Vec;
 
-pub const SpriteSheet = struct {
-    texture: c.GLuint,
-    fullWidth: u16,
-    fullHeight: u16,
-    w: u16,
-    h: u16,
-    angle: f32,
+const Error = error{ GenericError, NullPointer };
 
-    pub fn load(comptime fileName: []const u8, w: u16, h: u16, angle: f32) !SpriteSheet {
-        return SpriteSheet.loadContent(@embedFile(fileName), w, h, angle);
-    }
-
-    fn loadContent(content: []const u8, w: u16, h: u16, angle: f32) !SpriteSheet {
-        var width: c_int = 0;
-        var height: c_int = 0;
-        var ch: c_int = 0;
-        const img = stb.stbi_load_from_memory(@ptrCast([*c]const u8, content), @intCast(c_int, content.len), &width, &height, &ch, 4);
-        defer stb.stbi_image_free(img);
-        std.debug.assert(ch == 4);
-
-        var texture: c.GLuint = 0;
-        c.glGenTextures(1, &texture);
-        c.glBindTexture(c.GL_TEXTURE_2D, texture);
-        defer c.glBindTexture(c.GL_TEXTURE_2D, 0);
-
-        c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_REPEAT);
-        c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_REPEAT);
-        c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR_MIPMAP_LINEAR);
-        c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
-        c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, width, height, 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, img);
-        c.glGenerateMipmap(c.GL_TEXTURE_2D);
-
-        return .{
-            .texture = texture,
-            .fullWidth = @intCast(u16, width),
-            .fullHeight = @intCast(u16, height),
-            .w = w,
-            .h = h,
-            .angle = angle,
-        };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        c.glDeleteTextures(1, &self.texture);
-    }
-
-    pub fn sprite(self: *const @This(), x: u16, y: u16, angle: f32, z: model.Layer) model.Sprite {
-        return .{
-            .texture = self.texture,
-            .src = Rect.initSized(Vec.initInt(x * self.w, y * self.h), Vec.initInt(self.w, self.h)),
-            .angleRad = angle + self.angle,
-            .z = z,
-        };
-    }
+pub const Event = union(enum) {
+    keyPress: struct {
+        key: c_int,
+    },
+    mouseWheel: struct {
+        dx: f64,
+        dy: f64,
+    },
 };
 
+var events: std.ArrayList(Event) = undefined;
+
+pub fn framebufferSize(window: *c.GLFWwindow) Vec {
+    var w: c.GLint = 0;
+    var h: c.GLint = 0;
+    c.glfwGetFramebufferSize(window, &w, &h);
+    return Vec.initInt(w, h);
+}
+
+pub fn init(allocator: std.mem.Allocator) !*c.GLFWwindow {
+    events = std.ArrayList(Event).init(allocator);
+
+    _ = c.glfwSetErrorCallback(onError);
+    try checkCBool(c.glfwInit());
+
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 4);
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 3);
+    c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
+    if (builtin.os.tag == .macos) {
+        c.glfwWindowHint(c.GLFW_OPENGL_FORWARD_COMPAT, c.GL_TRUE);
+    }
+
+    const monitor = try checkNotNull(c.glfwGetPrimaryMonitor());
+    const mode = c.glfwGetVideoMode(monitor);
+
+    c.glfwWindowHint(c.GLFW_RED_BITS, mode.*.redBits);
+    c.glfwWindowHint(c.GLFW_GREEN_BITS, mode.*.greenBits);
+    c.glfwWindowHint(c.GLFW_BLUE_BITS, mode.*.blueBits);
+    c.glfwWindowHint(c.GLFW_REFRESH_RATE, mode.*.refreshRate);
+
+    const window = try checkNotNull(c.glfwCreateWindow(mode.*.width, mode.*.height, "My Window", monitor, null));
+
+    c.glfwMakeContextCurrent(window);
+    _ = c.glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+
+    try checkCBool(c.gladLoadGLLoader(@ptrCast(c.GLADloadproc, &c.glfwGetProcAddress)));
+
+    _ = c.glfwSetKeyCallback(window, onKey);
+    _ = c.glfwSetScrollCallback(window, onScroll);
+
+    return window;
+}
+
+pub fn deinit(window: *c.GLFWwindow) void {
+    c.glfwDestroyWindow(window);
+    c.glfwTerminate();
+    events.deinit();
+}
+
+pub fn pollEvents() []Event {
+    events.clearRetainingCapacity();
+    c.glfwPollEvents();
+    return events.items;
+}
+
+fn onError(err: c_int, desc: ?[*:0]const u8) callconv(.C) void {
+    std.log.err("glfw error {}: {any}\n", .{ err, desc });
+}
+
+fn framebufferSizeCallback(_: ?*c.GLFWwindow, width: c.GLint, height: c.GLint) callconv(.C) void {
+    c.glViewport(0, 0, width, height);
+}
+
+fn checkCBool(i: c_int) !void {
+    if (i == 0) {
+        return Error.GenericError;
+    }
+}
+
+fn checkBool(b: bool) !void {
+    if (!b) {
+        return Error.GenericError;
+    }
+}
+
+fn checkNotNull(ptr: anytype) !utils.Required(@TypeOf(ptr)) {
+    return ptr orelse Error.NullPointer;
+}
+
+fn onKey(_: ?*c.GLFWwindow, key: c_int, _: c_int, action: c_int, _: c_int) callconv(.C) void {
+    if (action == c.GLFW_PRESS) {
+        events.append(.{ .keyPress = .{ .key = key } }) catch @panic("can't add events");
+    }
+}
+
+fn onScroll(_: ?*c.GLFWwindow, dx: f64, dy: f64) callconv(.C) void {
+    events.append(.{ .mouseWheel = .{ .dx = dx, .dy = dy } }) catch @panic("can't add events");
+}

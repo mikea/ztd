@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const main = "src/main_glfw.zig";
+const main = "src/main.zig";
 
 pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});

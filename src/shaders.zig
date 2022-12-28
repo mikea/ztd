@@ -38,6 +38,11 @@ pub const Shaders = struct {
         const loc = gl.c.glGetUniformLocation(self.program, @ptrCast([*c]const u8, name));
         gl.c.glUniformMatrix4fv(loc, 1, 0, &mat);
     }
+
+    pub fn setVec2(self: *const @This(), name: []const u8, vec: [2]gl.c.GLfloat) void {
+        const loc = gl.c.glGetUniformLocation(self.program, @ptrCast([*c]const u8, name));
+        gl.c.glUniform2fv(loc, 1, &vec);
+    }
 };
 
 fn compileShaderFile(comptime t: gl.c.GLenum, comptime fileName: []const u8) !gl.c.GLuint {

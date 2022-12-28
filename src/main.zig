@@ -1,41 +1,18 @@
 const std = @import("std");
-const table = @import("table.zig");
-const buildOptions = @import("build_options");
-const engine = @import("engine.zig");
+const builtin = @import("builtin");
+const gl = @import("gl.zig");
+const c = gl.c;
+const Resources = @import("resources.zig").Resources;
+const Engine = @import("engine.zig").Engine;
 const Game = @import("game.zig").Game;
 const levels = @import("levels.zig");
-
-const model = @import("model.zig");
-const Id = model.Id;
-
-const contentDir = buildOptions.content_dir;
-const SparseSet = @import("sparse_set.zig").SparseSet;
-
-const sdl = @import("sdl.zig");
-const checkNotNull = sdl.checkNotNull;
-const checkInt = sdl.checkInt;
-const Sprite = sdl.Sprite;
-const SpriteSheet = sdl.SpriteSheet;
-
-const Resources = @import("resources.zig").Resources;
-
-const AppError = error{
-    NotImplementedError,
-    ResourceError,
-};
+const imgui = @import("imgui.zig");
+const utils = @import("utils.zig");
 
 const Statistics = struct {
-    engine: *engine.Engine,
-    resources: *Resources,
+    lastTicks: u64 = 0,
 
-    lastTicks: u32 = 0,
-    textId: Id = 0,
-
-    pub fn init(self: *Statistics) !void {
-        self.textId = self.engine.ids.nextId();
-    }
-
-    pub fn update(self: *Statistics, ticks: u32, frameAllocator: std.mem.Allocator, game: *Game, updateDurationNs: u64, renderDurationNs: u64) !void {
+    pub fn render(self: *Statistics, ticks: u64, frameAllocator: std.mem.Allocator, game: *Game, updateDurationNs: u64, renderDurationNs: u64) !void {
         defer self.lastTicks = ticks;
         if (self.lastTicks == 0 or ticks == self.lastTicks) {
             return;
@@ -47,7 +24,11 @@ const Statistics = struct {
             game.engine.renderedSprites,
             @intToFloat(f64, game.monsters.size()) * 1000000000 / @intToFloat(f64, updateDurationNs + renderDurationNs),
         });
-        try self.engine.setText(self.textId, text, .{ .x = self.engine.viewport.displaySize.x, .y = 0 }, engine.Alignment.RIGHT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+
+        if (imgui.c.ImGui_Begin("Statistics", null, 0)) {
+            imgui.c.ImGui_Text(text);
+        }
+        imgui.c.ImGui_End();
     }
 };
 
@@ -62,33 +43,19 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    checkInt(sdl.c.SDL_Init(sdl.c.SDL_INIT_VIDEO));
-    defer {
-        sdl.c.SDL_Quit();
-        std.log.info("application done, exiting", .{});
-    }
+    const window = try gl.init(allocator);
+    defer gl.deinit(window);
 
-    var displayMode: sdl.c.SDL_DisplayMode = undefined;
-    checkInt(sdl.c.SDL_GetCurrentDisplayMode(0, &displayMode));
+    var ui = try imgui.init(window);
+    defer ui.deinit();
 
-    const window = checkNotNull(sdl.c.SDL_Window, sdl.c.SDL_CreateWindow("ZTD", sdl.c.SDL_WINDOWPOS_UNDEFINED, sdl.c.SDL_WINDOWPOS_UNDEFINED, displayMode.w, displayMode.h, sdl.c.SDL_WINDOW_SHOWN));
-    defer sdl.c.SDL_DestroyWindow(window);
-
-    checkInt(sdl.c.SDL_SetWindowFullscreen(window, sdl.c.SDL_WINDOW_FULLSCREEN));
-
-    checkInt(sdl.c.TTF_Init());
-    defer sdl.c.TTF_Quit();
-
-    var renderer = checkNotNull(sdl.c.SDL_Renderer, sdl.c.SDL_CreateRenderer(window, -1, sdl.c.SDL_RENDERER_ACCELERATED));
-    defer sdl.c.SDL_DestroyRenderer(renderer);
-
-    var resources = try Resources.init(renderer);
+    var resources = try Resources.init();
     defer resources.deinit();
 
-    var eng = try engine.Engine.init(allocator, renderer);
-    defer eng.deinit();
+    var engine = try Engine.init(allocator, window);
+    defer engine.deinit();
 
-    var game = try Game.init(allocator, &eng, &resources);
+    var game = try Game.init(allocator, &engine, &resources);
     defer allocator.destroy(game);
     defer game.deinit();
 
@@ -106,44 +73,52 @@ pub fn main() !void {
         try levels.initLevel1(game);
     }
 
-    var statistics = Statistics{ .engine = &eng, .resources = &resources };
-    try statistics.init();
+    var stats = Statistics{};
 
-    var lastUpdateDuration: u64 = 0;
-    var lastRenderDuration: u64 = 0;
+    var wireframe: bool = false;
 
-    // main loop
-    while (true) {
-        while (eng.nextEvent()) |event| {
-            try game.event(&event);
-        }
-        if (!eng.running) {
-            break;
+    while (c.glfwWindowShouldClose(window) == 0) {
+        const ticks = @intCast(u64, std.time.milliTimestamp());
+        for (gl.pollEvents()) |event| {
+            engine.onEvent(&event);
         }
 
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const frameAllocator = arena.allocator();
 
-        const ticks = sdl.c.SDL_GetTicks();
+        gl.c.glPolygonMode(gl.c.GL_FRONT_AND_BACK, if (wireframe) gl.c.GL_LINE else gl.c.GL_FILL);
+
+        var updateDuration: u64 = 0;
         {
             var timer = try std.time.Timer.start();
             defer {
-                lastUpdateDuration = timer.read();
+                updateDuration = timer.read();
             }
             try game.update(frameAllocator, ticks);
-            try statistics.update(ticks, frameAllocator, game, lastUpdateDuration, lastRenderDuration);
         }
 
+        ui.newFrame();
+
+        var renderDuration: u64 = 0;
         {
             var timer = try std.time.Timer.start();
             defer {
-                lastRenderDuration = timer.read();
+                renderDuration = timer.read();
             }
-
-            try eng.render();
+            try engine.render();
             try game.render();
         }
-        sdl.c.SDL_RenderPresent(renderer);
+
+        try stats.render(ticks, frameAllocator, game, updateDuration, renderDuration);
+
+        if (imgui.c.ImGui_Begin("Debug", null, 0)) {
+            _ = imgui.c.ImGui_Checkbox("Wireframe", &wireframe);
+        }
+        imgui.c.ImGui_End();
+
+        ui.render();
+
+        c.glfwSwapBuffers(window);
     }
 }

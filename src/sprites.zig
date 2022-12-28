@@ -7,6 +7,7 @@ const model = @import("model.zig");
 const Rect = @import("geom.zig").Rect;
 const Vec = @import("geom.zig").Vec;
 const Shaders = @import("shaders.zig").Shaders;
+const Viewport = @import("viewport.zig").Viewport;
 
 pub const SpriteSheet = struct {
     texture: gl.c.GLuint,
@@ -33,8 +34,8 @@ pub const SpriteSheet = struct {
         gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, texture);
         defer gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, 0);
 
-        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_S, gl.c.GL_REPEAT);
-        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_T, gl.c.GL_REPEAT);
+        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_S, gl.c.GL_CLAMP_TO_EDGE);
+        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_T, gl.c.GL_CLAMP_TO_EDGE);
         gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MIN_FILTER, gl.c.GL_LINEAR_MIPMAP_LINEAR);
         gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MAG_FILTER, gl.c.GL_LINEAR);
         gl.c.glTexImage2D(gl.c.GL_TEXTURE_2D, 0, gl.c.GL_RGBA, width, height, 0, gl.c.GL_RGBA, gl.c.GL_UNSIGNED_BYTE, img);
@@ -58,8 +59,9 @@ pub const SpriteSheet = struct {
         return .{
             .texture = self.texture,
             .src = Rect.initSized(Vec.initInt(x * self.w, y * self.h), Vec.initInt(self.w, self.h)),
-            .angleRad = angle + self.angle,
+            .angle = angle + self.angle,
             .z = z,
+            .sheet = self,
         };
     }
 };
@@ -69,6 +71,9 @@ pub const SpriteRenderer = struct {
     vao: gl.c.GLuint,
 
     pub fn init() !SpriteRenderer {
+        gl.c.glEnable(gl.c.GL_BLEND);
+        gl.c.glBlendFunc(gl.c.GL_SRC_ALPHA, gl.c.GL_ONE_MINUS_SRC_ALPHA);
+
         var vbo: gl.c.GLuint = 0;
         gl.c.glGenBuffers(1, &vbo);
 
@@ -108,46 +113,45 @@ pub const SpriteRenderer = struct {
         gl.c.glDeleteVertexArrays(1, &self.vao);
     }
 
-    pub fn startFrame(self: *@This(), displaySize: Vec) void {
+    pub fn startFrame(self: *@This(), viewport: *Viewport) void {
         self.shaders.use();
-        const mat = [16]gl.c.GLfloat{
-            2 / displaySize.x, 0,                 0,  0,
-            0,                 2 / displaySize.y, 0,  0,
-            0,                 0,                 -1, 0,
-            -1,                -1,                0,  1,
-        };
-        self.shaders.setMatrix4("projection", mat);
-        // std.log.debug("displaySize: {} projection: {any}", .{ displaySize, mat });
+        self.shaders.setMatrix4("projection", viewport.mat);
     }
 
     pub fn renderSprite(self: *@This(), sprite: *const model.Sprite, destRect: *const Rect) void {
         self.shaders.use();
         const l = destRect.a.x;
         const b = destRect.a.y;
-        const r = destRect.b.x;
-        const t = destRect.b.y;
-        // const pos = destRect.center();
+        const w = destRect.b.x - l;
+        const h = destRect.b.y - b;
+        const cos = if (sprite.angle != 0) std.math.cos(sprite.angle) else 1;
+        const sin = if (sprite.angle != 0) std.math.sin(sprite.angle) else 0;
+
+        // RotationTransform[theta, {l + w/2, b + h/2}].
+        // TranslationTransform[{l, b}] .
+        // ScalingTransform[{w, h}] .
+        // TranslationTransform[{1/2, 1/2}].
+        // ReflectionTransform[{0, 1}].
+        // TranslationTransform[{-1/2, -1/2}]
+
         const modelMat = [16]gl.c.GLfloat{
-            r - l, 0,     0,  0,
-            0,     t - b, 0,  0,
-            0,     0,     -1, 0,
-            l,     b,     0,  1,
+            w * cos,                           w * sin,                           0, 0,
+            h * sin,                           -h * cos,                          0, 0,
+            0,                                 0,                                 1, 0,
+            l + 0.5 * (w - w * cos - h * sin), b + 0.5 * (h + h * cos - w * sin), 0, 1,
         };
         self.shaders.setMatrix4("model", modelMat);
-        // std.log.debug("destRect: {} model: {any}", .{ destRect, modelMat });
-        // glm::mat4 model = glm::mat4(1.0f);
-        // model = glm::translate(model, glm::vec3(position, 0.0f));  // first translate (transformations are: scale happens first, then rotation, and then final translation happens; reversed order)
-
-        // model = glm::translate(model, glm::vec3(0.5f * size.x, 0.5f * size.y, 0.0f)); // move origin of rotation to center of quad
-        // model = glm::rotate(model, glm::radians(rotate), glm::vec3(0.0f, 0.0f, 1.0f)); // then rotate
-        // model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, 0.0f)); // move origin back
-
-        // model = glm::scale(model, glm::vec3(size, 1.0f)); // last scale
-
-        // this->shader.SetMatrix4("model", model);
-
-        // // render textured quad
-        // self.shaders.setVector3f("spriteColor", color);
+        const size = sprite.src.size();
+        const texScale = [2]gl.c.GLfloat{
+            size.x / @intToFloat(gl.c.GLfloat, sprite.sheet.fullWidth),
+            size.y / @intToFloat(gl.c.GLfloat, sprite.sheet.fullHeight),
+        };
+        const texOffset = [2]gl.c.GLfloat{
+            sprite.src.a.x / @intToFloat(gl.c.GLfloat, sprite.sheet.fullWidth),
+            sprite.src.a.y / @intToFloat(gl.c.GLfloat, sprite.sheet.fullHeight),
+        };
+        self.shaders.setVec2("texScale", texScale);
+        self.shaders.setVec2("texOffset", texOffset);
 
         gl.c.glActiveTexture(gl.c.GL_TEXTURE0);
         gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, sprite.texture);

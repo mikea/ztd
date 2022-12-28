@@ -71,7 +71,7 @@ pub const Game = struct {
         try self.monsters.set(id, d.monster);
         try self.attackers.set(id, d.attack);
         try self.engine.healths.set(id, d.health);
-        try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
+        try self.engine.bounds.set(id, Rect.initCentered(pos, d.size));
         const sheet = self.resources.getSheet(d.animations.walk.sheet);
         const coords = d.animations.walk.sprites;
         const i = rnd.random().int(usize) % d.animations.walk.sprites.len;
@@ -90,7 +90,7 @@ pub const Game = struct {
         try self.towers.set(id, d.tower);
         try self.attackers.set(id, d.attack);
         try self.engine.healths.set(id, d.health);
-        try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, d.size.x, d.size.y));
+        try self.engine.bounds.set(id, Rect.initCentered(pos, d.size));
         try self.engine.sprites.set(id, (self.resources.getSheet(d.sheet)).sprite(d.sprite.x, d.sprite.y, 0, .TOWER));
         self.towersUpdated = true;
     }
@@ -132,7 +132,7 @@ pub const Game = struct {
             } = .{ .game = self, .pos = pos };
 
             const attacker = self.attackers.get(entry.id);
-            try self.engine.bounds.findIntersect(Rect.centered(pos, .{ .x = attacker.*.range * 2, .y = attacker.*.range * 2 }), @TypeOf(collector), &collector, @TypeOf(collector).callback);
+            try self.engine.bounds.findIntersect(Rect.initCentered(pos, .{ .x = attacker.*.range * 2, .y = attacker.*.range * 2 }), @TypeOf(collector), &collector, @TypeOf(collector).callback);
             attacker.*.target = collector.closestId;
         }
     }
@@ -223,7 +223,7 @@ pub const Game = struct {
         };
         const sheet = self.resources.getSheet(projectile.sheet);
         try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.angle });
-        try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, 8, 8));
+        try self.engine.bounds.set(id, Rect.initCentered(pos, .{ .x = 8, .y = 8 }));
         try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
     }
 
@@ -267,7 +267,7 @@ pub const Game = struct {
                     const dn = dir.scale(ds / dist);
                     const newPos = projectile.translate(dn);
                     try self.engine.bounds.update(id, newPos);
-                    (self.engine.sprites.get(id)).angleRad = dir.angle() + entry.value.spriteAngleRad;
+                    (self.engine.sprites.get(id)).angle = dir.angle() + entry.value.spriteAngleRad;
                 }
             }
         }
@@ -282,20 +282,23 @@ pub const Game = struct {
             var i: u32 = 0;
             while (i < num) {
                 const angle: f32 = 2 * std.math.pi * rnd.random().float(f32);
-                // const id = self.engine.ids.nextId();
-                // const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
-                // try self.engine.bounds.set(id, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, sheet.w) / 4, @intToFloat(f32, sheet.h) / 4));
-                // try self.engine.sprites.set(id, .{ .texture = sheet.texture, .src = .{ .x = 0, .y = 0, .w = sheet.w, .h = sheet.h }, .angleRad = angle + sheet.angleRad, .z = .PROJECTILE });
-                // try self.engine.particles.set(id, .{
-                //     .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
-                //     .startTicks = ticks,
-                //     .endTicks = ticks + duration,
-                //     .onComplete = .DO_NOTHING,
-                // });
-                // i += 1;
-                _ = angle;
-                _ = duration;
-                @panic("not implemented");
+                const id = self.engine.ids.nextId();
+                const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
+                try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.w, sheet.h).scale(1.0 / 4.0)));
+                try self.engine.sprites.set(id, .{
+                    .texture = sheet.texture,
+                    .src = Rect.init(0, 0, @intToFloat(f32, sheet.w), @intToFloat(f32, sheet.h)),
+                    .angle = angle + sheet.angle,
+                    .z = .PROJECTILE,
+                    .sheet = sheet,
+                });
+                try self.engine.particles.set(id, .{
+                    .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
+                    .startTicks = ticks,
+                    .endTicks = ticks + duration,
+                    .onComplete = .DO_NOTHING,
+                });
+                i += 1;
             }
         }
 
@@ -323,7 +326,7 @@ pub const Game = struct {
             .monsters = std.ArrayList(Id).init(frameAllocator),
         };
 
-        try self.engine.bounds.findIntersect(Rect.initCentered(pos.x, pos.y, radius * 2, radius * 2), @TypeOf(processor), &processor, @TypeOf(processor).callback);
+        try self.engine.bounds.findIntersect(Rect.initCentered(pos, .{ .x = radius * 2, .y = radius * 2 }), @TypeOf(processor), &processor, @TypeOf(processor).callback);
         for (processor.monsters.items) |id| {
             try self.addDamage(ticks, id, damage, .NOT_DELAYED, frameAllocator);
         }
@@ -425,20 +428,16 @@ pub const Game = struct {
         try self.engine.updateAnimations(ticks);
         try self.updateDeleted();
 
-        // if (self.monsters.size() == 0) {
-        //     try std.io.getStdOut().writer().print("YOU WON!!!!\n", .{});
-        //     std.c.exit(0);
-        // }
-        // if (self.towers.size() == 0) {
-        //     try std.io.getStdOut().writer().print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
-        //     std.c.exit(0);
-        // }
+        if (self.monsters.size() == 0) {
+            try std.io.getStdOut().writer().print("YOU WON!!!!\n", .{});
+            std.c.exit(0);
+        }
+        if (self.towers.size() == 0) {
+            try std.io.getStdOut().writer().print("YOU LOST! {} monsters remaining\n", .{self.monsters.size()});
+            std.c.exit(0);
+        }
 
         // try self.ui.update(frameAllocator);
-
-        // if (builtin.mode == .Debug and self.frame % 100 == 0) {
-        //     self.engine.bounds.tree.checkConsistency();
-        // }
 
         self.lastTicks = ticks;
         self.towersUpdated = false;

@@ -1,6 +1,7 @@
 const resources = @import("resources.zig");
 const table = @import("table.zig");
 const gl = @import("gl.zig");
+const sprites = @import("sprites.zig");
 const Vec = @import("geom.zig").Vec;
 const Rect = @import("geom.zig").Rect;
 
@@ -65,7 +66,7 @@ pub const AttackersTable = table.Table(Id, maxId, Attacker);
 pub const SpriteCoords = struct { x: u8, y: u8 };
 
 pub const Animation = struct {
-    sheet: *const gl.SpriteSheet,
+    sheet: *const sprites.SpriteSheet,
     coords: []const SpriteCoords,
     animationDelay: u32,
     z: Layer,
@@ -100,7 +101,8 @@ pub const Layer = enum {
 pub const Sprite = struct {
     texture: gl.c.GLuint,
     src: Rect,
-    angleRad: f64,
+    sheet: *const sprites.SpriteSheet,
+    angle: f32,
     z: Layer,
 };
 

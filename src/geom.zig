@@ -101,13 +101,7 @@ pub const Rect = struct {
         return .{ .a = .{ .x = x1, .y = y1 }, .b = .{ .x = x2, .y = y2 } };
     }
 
-    pub fn initCentered(x: f32, y: f32, w: f32, h: f32) Rect {
-        const w2 = w / 2;
-        const h2 = h / 2;
-        return .{ .a = .{ .x = x - w2, .y = y - h2 }, .b = .{ .x = x + w2, .y = y + h2 } };
-    }
-
-    pub fn centered(c: Vec, aSize: Vec) Rect {
+    pub fn initCentered(c: Vec, aSize: Vec) Rect {
         const s2 = aSize.scale(1.0 / 2.0);
         return .{ .a = c.minus(s2), .b = c.add(s2) };
     }
