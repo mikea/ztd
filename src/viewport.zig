@@ -23,21 +23,24 @@ pub const Viewport = struct {
 
     pub fn update(self: *Viewport) void {
         const size = gl.framebufferSize(self.window).scale(self.scale);
-        self.view = Rect.initCentered(self.center, size);
-
-        // std.log.debug("center: {} scale: {} view: {}", .{self.center, self.scale, self.view});
 
         const s = self.scale;
         const w = size.x;
         const h = size.y;
+        const sw = s * w;
+        const sh = s * h;
         const cx = self.center.x;
         const cy = self.center.y;
 
+        self.view = .{
+            .a = .{ .x = cx - sw / 2, .y = cy - sh / 2 },
+            .b = .{ .x = cx + sw / 2, .y = cy + sh / 2 },
+        };
         self.mat = [16]gl.c.GLfloat{
-            2 / w / s,       0,               0, 0,
-            0,               2 / h / s,       0, 0,
-            0,               0,               1, 0,
-            -2 * cx / w / s, -2 * cy / h / s, 0, 1,
+            2 / sw,       0,            0, 0,
+            0,            2 / sh,       0, 0,
+            0,            0,            1, 0,
+            -2 * cx / sw, -2 * cy / sh, 0, 1,
         };
     }
 
@@ -69,7 +72,7 @@ pub const Viewport = struct {
             },
             .mouseWheel => |mouseWheel| {
                 self.scale *= if (mouseWheel.dy > 0) mouseZoom else 1.0 / mouseZoom;
-            }
+            },
         }
         self.update();
     }

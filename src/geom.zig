@@ -102,7 +102,7 @@ pub const Rect = struct {
     }
 
     pub fn initCentered(c: Vec, aSize: Vec) Rect {
-        const s2 = aSize.scale(1.0 / 2.0);
+        const s2 = aSize.scale(0.5);
         return .{ .a = c.minus(s2), .b = c.add(s2) };
     }
 

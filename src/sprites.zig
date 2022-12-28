@@ -130,7 +130,7 @@ pub const SpriteRenderer = struct {
 
         // RotationTransform[theta, {l + w/2, b + h/2}].
         // TranslationTransform[{l, b}] .
-        // ScalingTransform[{w, h}] .
+        // ScalingTransform[{w, h}]
 
         const modelMat = [16]gl.c.GLfloat{
             w * cos,                           w * sin,                           0, 0,
