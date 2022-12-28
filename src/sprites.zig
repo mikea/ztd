@@ -6,7 +6,7 @@ const gl = @import("gl.zig");
 const model = @import("model.zig");
 const Rect = @import("geom.zig").Rect;
 const Vec = @import("geom.zig").Vec;
-const Shaders = @import("shaders.zig").Shaders;
+const Program = @import("shaders.zig").Program;
 const Viewport = @import("viewport.zig").Viewport;
 
 pub const SpriteSheet = struct {
@@ -67,7 +67,7 @@ pub const SpriteSheet = struct {
 };
 
 pub const SpriteRenderer = struct {
-    shaders: Shaders,
+    program: Program,
     vao: gl.c.GLuint,
 
     pub fn init() !SpriteRenderer {
@@ -80,15 +80,16 @@ pub const SpriteRenderer = struct {
         var vao: gl.c.GLuint = 0;
         gl.c.glGenVertexArrays(1, &vao);
 
+        // y axis of texture is flipped to account for flipped images when loaded
         const vertices = [_]gl.c.GLfloat{
-            // pos      // tex
-            0.0, 1.0, 0.0, 1.0,
-            1.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
+            // pos    // tex
+            0.0, 1.0, 0.0, 0.0,
+            1.0, 0.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 1.0,
 
-            0.0, 1.0, 0.0, 1.0,
-            1.0, 1.0, 1.0, 1.0,
-            1.0, 0.0, 1.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            1.0, 1.0, 1.0, 0.0,
+            1.0, 0.0, 1.0, 1.0,
         };
 
         gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, vbo);
@@ -103,23 +104,23 @@ pub const SpriteRenderer = struct {
         gl.c.glVertexAttribPointer(0, 4, gl.c.GL_FLOAT, gl.c.GL_FALSE, 4 * @sizeOf(gl.c.GLfloat), null);
 
         return .{
-            .shaders = try Shaders.init("shaders/spriteVertex.glsl", "shaders/spriteFragment.glsl"),
+            .program = try Program.init("shaders/spriteVertex.glsl", "shaders/spriteFragment.glsl"),
             .vao = vao,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        self.shaders.deinit();
+        self.program.deinit();
         gl.c.glDeleteVertexArrays(1, &self.vao);
     }
 
     pub fn startFrame(self: *@This(), viewport: *Viewport) void {
-        self.shaders.use();
-        self.shaders.setMatrix4("projection", viewport.mat);
+        self.program.use();
+        self.program.setMatrix4("projection", viewport.mat);
     }
 
     pub fn renderSprite(self: *@This(), sprite: *const model.Sprite, destRect: *const Rect) void {
-        self.shaders.use();
+        self.program.use();
         const l = destRect.a.x;
         const b = destRect.a.y;
         const w = destRect.b.x - l;
@@ -130,17 +131,14 @@ pub const SpriteRenderer = struct {
         // RotationTransform[theta, {l + w/2, b + h/2}].
         // TranslationTransform[{l, b}] .
         // ScalingTransform[{w, h}] .
-        // TranslationTransform[{1/2, 1/2}].
-        // ReflectionTransform[{0, 1}].
-        // TranslationTransform[{-1/2, -1/2}]
 
         const modelMat = [16]gl.c.GLfloat{
             w * cos,                           w * sin,                           0, 0,
-            h * sin,                           -h * cos,                          0, 0,
+            -h * sin,                          h * cos,                           0, 0,
             0,                                 0,                                 1, 0,
-            l + 0.5 * (w - w * cos - h * sin), b + 0.5 * (h + h * cos - w * sin), 0, 1,
+            l + 0.5 * (w - w * cos + h * sin), b + 0.5 * (h - h * cos - w * sin), 0, 1,
         };
-        self.shaders.setMatrix4("model", modelMat);
+        self.program.setMatrix4("model", modelMat);
         const size = sprite.src.size();
         const texScale = [2]gl.c.GLfloat{
             size.x / @intToFloat(gl.c.GLfloat, sprite.sheet.fullWidth),
@@ -150,8 +148,8 @@ pub const SpriteRenderer = struct {
             sprite.src.a.x / @intToFloat(gl.c.GLfloat, sprite.sheet.fullWidth),
             sprite.src.a.y / @intToFloat(gl.c.GLfloat, sprite.sheet.fullHeight),
         };
-        self.shaders.setVec2("texScale", texScale);
-        self.shaders.setVec2("texOffset", texOffset);
+        self.program.setVec2("texScale", texScale);
+        self.program.setVec2("texOffset", texOffset);
 
         gl.c.glActiveTexture(gl.c.GL_TEXTURE0);
         gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, sprite.texture);

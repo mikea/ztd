@@ -3,12 +3,12 @@ const gl = @import("gl.zig");
 
 const Error = error{ ShaderError };
 
-pub const Shaders = struct {
+pub const Program = struct {
     program: gl.c.GLuint,
     vertex: gl.c.GLuint,
     fragment: gl.c.GLuint,
 
-    pub fn init(comptime vertexSource: []const u8, comptime fragmentSource: []const u8) !Shaders {
+    pub fn init(comptime vertexSource: []const u8, comptime fragmentSource: []const u8) !@This() {
         const vertex = try compileShaderFile(gl.c.GL_VERTEX_SHADER, vertexSource);
         const fragment = try compileShaderFile(gl.c.GL_FRAGMENT_SHADER, fragmentSource);
 
