@@ -238,17 +238,16 @@ pub const UI = struct {
     }
 
     fn updateBuildShadow(self: *@This()) !void {
-        _ = self;
-        // if (self.mode == Mode.BUILD) {
-        //     const towerPrototype = self.towerPrototype;
-        //     const towerSheet = self.game.resources.getSheet(towerPrototype.sheet);
-        //     const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
-        //     const sprite = towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
-        //     try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(towerSheet.w, towerSheet.h)));
-        //     try self.engine.sprites.set(self.shadowId, sprite);
-        // } else {
-        //     self.engine.bounds.delete(self.shadowId);
-        //     self.engine.sprites.delete(self.shadowId);
-        // }
+        if (self.mode == Mode.BUILD) {
+            const towerPrototype = self.towerPrototype;
+            const towerSheet = self.game.resources.getSheet(towerPrototype.sheet);
+            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
+            const sprite = towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
+            try self.engine.bounds.set(self.shadowId, Rect.initCentered(pos, Vec.initInt(towerSheet.w, towerSheet.h)));
+            try self.engine.sprites.set(self.shadowId, sprite);
+        } else {
+            self.engine.bounds.delete(self.shadowId);
+            self.engine.sprites.delete(self.shadowId);
+        }
     }
 };

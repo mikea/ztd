@@ -15,14 +15,15 @@ pub const Viewport = struct {
     mat: [16]gl.c.GLfloat = undefined,
 
     pub fn init(window: *gl.c.GLFWwindow) Viewport {
+        const size = gl.framebufferSize(window);
         // initially 1000 wide, centered on origin
-        var viewport = Viewport{ .window = window, .scale = 0.5, .center = .{ .x = 0, .y = 0 } };
+        var viewport = Viewport{ .window = window, .scale = 1000 / size.x, .center = .{ .x = 0, .y = 0 } };
         viewport.update();
         return viewport;
     }
 
     pub fn update(self: *Viewport) void {
-        const size = gl.framebufferSize(self.window).scale(self.scale);
+        const size = gl.framebufferSize(self.window);
 
         const s = self.scale;
         const w = size.x;
@@ -48,7 +49,10 @@ pub const Viewport = struct {
     pub fn screenToGame(self: *const Viewport, v: Vec) Vec {
         const size = gl.framebufferSize(self.window);
         const s = self.scale;
-        return self.center.add(.{ .x = s * (v.x - size.x / 2), .y = s * (size.y / 2 - v.y) });
+        const w = size.x;
+        const h = size.y;
+
+        return self.center.add(.{ .x = s * (v.x - w / 2), .y = s * (h / 2 - v.y) });
     }
 
     pub fn onEvent(self: *Viewport, event: *const gl.Event) void {

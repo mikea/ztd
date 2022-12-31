@@ -25,6 +25,9 @@ pub const Event = union(enum) {
         action: enum { press },
         button: enum { left, right },
     },
+    mouseMove: struct {
+        pos: Vec,
+    },
 };
 
 var events: std.ArrayList(Event) = undefined;
@@ -67,6 +70,7 @@ pub fn init(allocator: std.mem.Allocator) !*c.GLFWwindow {
     _ = c.glfwSetKeyCallback(window, onKey);
     _ = c.glfwSetScrollCallback(window, onScroll);
     _ = c.glfwSetMouseButtonCallback(window, onMouseButton);
+    _ = c.glfwSetCursorPosCallback(window, onCursorPos);
 
     return window;
 }
@@ -129,9 +133,15 @@ fn onMouseButton(_: ?*c.GLFWwindow, button: c_int, action: c_int, _: c_int) call
     }
 }
 
+fn onCursorPos(_: ?*c.GLFWwindow, x: f64, y: f64) callconv(.C) void {
+    events.append(.{ .mouseMove = .{ .pos = Vec.init(@floatCast(f32, x), @floatCast(f32, y)) } }) catch @panic("can't add events");
+}
+
 pub fn getCursorPos(window: *c.GLFWwindow) Vec {
     var xpos: f64 = undefined;
     var ypos: f64 = undefined;
     c.glfwGetCursorPos(window, &xpos, &ypos);
     return Vec.init(@floatCast(f32, xpos), @floatCast(f32, ypos));
 }
+
+

@@ -8,6 +8,7 @@ const Rect = @import("geom.zig").Rect;
 const Vec = @import("geom.zig").Vec;
 const Program = @import("shaders.zig").Program;
 const Viewport = @import("viewport.zig").Viewport;
+const rendering = @import("rendering.zig");
 
 pub const SpriteSheet = struct {
     texture: gl.c.GLuint,
@@ -66,79 +67,30 @@ pub const SpriteSheet = struct {
     }
 };
 
+// Renders rectangles with a given shader program.
 pub const SpriteRenderer = struct {
+    rectRenderer: rendering.RectRenderer,
     program: Program,
-    vao: gl.c.GLuint,
 
     pub fn init() !SpriteRenderer {
-        gl.c.glEnable(gl.c.GL_BLEND);
-        gl.c.glBlendFunc(gl.c.GL_SRC_ALPHA, gl.c.GL_ONE_MINUS_SRC_ALPHA);
-
-        var vbo: gl.c.GLuint = 0;
-        gl.c.glGenBuffers(1, &vbo);
-
-        var vao: gl.c.GLuint = 0;
-        gl.c.glGenVertexArrays(1, &vao);
-
-        // y axis of texture is flipped to account for flipped images when loaded
-        const vertices = [_]gl.c.GLfloat{
-            // pos    // tex
-            0.0, 1.0, 0.0, 0.0,
-            1.0, 0.0, 1.0, 1.0,
-            0.0, 0.0, 0.0, 1.0,
-
-            0.0, 1.0, 0.0, 0.0,
-            1.0, 1.0, 1.0, 0.0,
-            1.0, 0.0, 1.0, 1.0,
-        };
-
-        gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, vbo);
-        defer gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, 0);
-
-        gl.c.glBufferData(gl.c.GL_ARRAY_BUFFER, vertices.len * @sizeOf(gl.c.GLfloat), &vertices, gl.c.GL_STATIC_DRAW);
-
-        gl.c.glBindVertexArray(vao);
-        defer gl.c.glBindVertexArray(0);
-
-        gl.c.glEnableVertexAttribArray(0);
-        gl.c.glVertexAttribPointer(0, 4, gl.c.GL_FLOAT, gl.c.GL_FALSE, 4 * @sizeOf(gl.c.GLfloat), null);
-
         return .{
+            .rectRenderer = rendering.RectRenderer.init(),
             .program = try Program.init("shaders/spriteVertex.glsl", "shaders/spriteFragment.glsl"),
-            .vao = vao,
         };
     }
 
     pub fn deinit(self: *@This()) void {
+        self.rectRenderer.deinit();
         self.program.deinit();
-        gl.c.glDeleteVertexArrays(1, &self.vao);
     }
 
     pub fn startFrame(self: *@This(), viewport: *Viewport) void {
-        self.program.use();
-        self.program.setMatrix4("projection", viewport.mat);
+        self.rectRenderer.startFrame(&self.program, viewport);
     }
 
     pub fn renderSprite(self: *@This(), sprite: *const model.Sprite, destRect: *const Rect) void {
         self.program.use();
-        const l = destRect.a.x;
-        const b = destRect.a.y;
-        const w = destRect.b.x - l;
-        const h = destRect.b.y - b;
-        const cos = if (sprite.angle != 0) std.math.cos(sprite.angle) else 1;
-        const sin = if (sprite.angle != 0) std.math.sin(sprite.angle) else 0;
 
-        // RotationTransform[theta, {l + w/2, b + h/2}].
-        // TranslationTransform[{l, b}] .
-        // ScalingTransform[{w, h}]
-
-        const modelMat = [16]gl.c.GLfloat{
-            w * cos,                           w * sin,                           0, 0,
-            -h * sin,                          h * cos,                           0, 0,
-            0,                                 0,                                 1, 0,
-            l + 0.5 * (w - w * cos + h * sin), b + 0.5 * (h - h * cos - w * sin), 0, 1,
-        };
-        self.program.setMatrix4("model", modelMat);
         const size = sprite.src.size();
         const texScale = [2]gl.c.GLfloat{
             size.x / @intToFloat(gl.c.GLfloat, sprite.sheet.fullWidth),
@@ -155,8 +107,6 @@ pub const SpriteRenderer = struct {
         gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, sprite.texture);
         defer gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, 0);
 
-        gl.c.glBindVertexArray(self.vao);
-        defer gl.c.glBindVertexArray(0);
-        gl.c.glDrawArrays(gl.c.GL_TRIANGLES, 0, 6);
+        self.rectRenderer.render(&self.program, destRect, sprite.z, sprite.angle);
     }
 };

@@ -6,6 +6,7 @@ const Id = model.Id;
 const maxId = model.maxId;
 
 const gl = @import("gl.zig");
+const rendering = @import("rendering.zig");
 
 const geom = @import("geom.zig");
 const Vec = geom.Vec;
@@ -58,6 +59,7 @@ pub const Engine = struct {
 
     viewport: Viewport,
     spriteRenderer: sprites.SpriteRenderer,
+    healthRenderer: rendering.HealthRenderer,
 
     // tables
     // will be deleted at the end of the update
@@ -79,6 +81,7 @@ pub const Engine = struct {
             .ids = try IdManager.init(allocator),
             .viewport = Viewport.init(window),
             .spriteRenderer = try sprites.SpriteRenderer.init(),
+            .healthRenderer = try rendering.HealthRenderer.init(),
             .toDelete = try SparseSet(Id, maxId, void).init(allocator),
             .bounds = try BoundsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
@@ -110,8 +113,8 @@ pub const Engine = struct {
 
     pub fn onEvent(self: *Engine, event: *const gl.Event) void {
         switch (event.*) {
-            .mouseButton => {
-                self.mousePos = self.viewport.screenToGame(gl.getCursorPos(self.window));
+            .mouseMove => |mouseMove| {
+                self.mousePos = self.viewport.screenToGame(mouseMove.pos);
             },
             else => {},
         }
@@ -162,7 +165,7 @@ pub const Engine = struct {
 
     pub fn render(self: *Engine) !void {
         gl.c.glClearColor(1.0, 1.0, 1.0, 1.0);
-        gl.c.glClear(gl.c.GL_COLOR_BUFFER_BIT);
+        gl.c.glClear(gl.c.GL_COLOR_BUFFER_BIT | gl.c.GL_DEPTH_BUFFER_BIT);
 
         self.viewport.update();
         try self.renderSprites();
@@ -171,41 +174,32 @@ pub const Engine = struct {
     fn renderSprites(self: *Engine) !void {
         self.renderedSprites = 0;
         self.spriteRenderer.startFrame(&self.viewport);
-        for (std.enums.values(model.Layer)) |layer| {
-            var renderer: struct {
-                engine: *Engine,
-                z: model.Layer,
+        self.healthRenderer.startFrame(&self.viewport);
 
-                pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
-                    if (s.engine.sprites.find(id)) |sprite| {
-                        if (s.z != sprite.z) {
-                            return;
-                        }
-                        s.engine.renderedSprites += 1;
-                        // const destRect = s.engine.viewport.toScreen(rect);
-                        s.engine.spriteRenderer.renderSprite(sprite, &rect);
-                        // checkInt(sdl.c.SDL_RenderCopyEx(s.engine.renderer, sprite.texture, &sprite.src, &destRect, 360 * sprite.angleRad / (2 * std.math.pi), null, sdl.c.SDL_FLIP_NONE));
+        var renderer: struct {
+            engine: *Engine,
 
-                        if (s.engine.healths.find(id)) |health| {
-                            if (health.*.health < health.*.maxHealth) {
-                                // display health underneath the main sprite
-                                const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
-                                const healthRect = Rect{
-                                    .a = .{ .x = rect.a.x, .y = rect.b.y },
-                                    .b = .{ .x = rect.a.x + (rect.b.x - rect.a.x) * healthRatio, .y = rect.b.y + 1 },
-                                };
-                                // const destHealthRect = s.engine.viewport.toScreen(healthRect);
-                                // checkInt(sdl.c.SDL_SetRenderDrawColor(s.engine.renderer, 0, 255, 0, 255));
-                                // checkInt(sdl.c.SDL_RenderFillRect(s.engine.renderer, &destHealthRect));
-                                _ = healthRect;
-                            }
+            pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
+                if (s.engine.sprites.find(id)) |sprite| {
+                    s.engine.renderedSprites += 1;
+                    s.engine.spriteRenderer.renderSprite(sprite, &rect);
+
+                    if (s.engine.healths.find(id)) |health| {
+                        if (health.*.health < health.*.maxHealth) {
+                            // display health underneath the main sprite
+                            const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
+                            const healthRect = Rect{
+                                .a = .{ .x = rect.a.x, .y = rect.a.y - 1 },
+                                .b = .{ .x = rect.b.x, .y = rect.a.y },
+                            };
+                            s.engine.healthRenderer.renderHealth(healthRatio, &healthRect);
                         }
                     }
                 }
-            } = .{ .engine = self, .z = layer };
+            }
+        } = .{ .engine = self };
 
-            try self.bounds.findIntersect(self.viewport.view, @TypeOf(renderer), &renderer, @TypeOf(renderer).callback);
-        }
+        try self.bounds.findIntersect(self.viewport.view, @TypeOf(renderer), &renderer, @TypeOf(renderer).callback);
     }
 
     // fn renderText(self: *Engine) !void {

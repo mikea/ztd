@@ -43,6 +43,11 @@ pub const Program = struct {
         const loc = gl.c.glGetUniformLocation(self.program, @ptrCast([*c]const u8, name));
         gl.c.glUniform2fv(loc, 1, &vec);
     }
+
+    pub fn setFloat(self: *const @This(), name: []const u8, f: gl.c.GLfloat) void {
+        const loc = gl.c.glGetUniformLocation(self.program, @ptrCast([*c]const u8, name));
+        gl.c.glUniform1f(loc, f);
+    }
 };
 
 fn compileShaderFile(comptime t: gl.c.GLenum, comptime fileName: []const u8) !gl.c.GLuint {

@@ -115,6 +115,8 @@ pub fn main() !void {
 
         try stats.render(ticks, frameAllocator, game, updateDuration, renderDuration);
 
+        const viewport = imgui.c.ImGui_GetMainViewport();
+        imgui.c.ImGui_SetNextWindowPosEx(.{ .x = 0, .y = viewport.*.Size.y}, imgui.c.ImGuiCond_Appearing, .{.x = 0, .y = 1});
         if (imgui.c.ImGui_Begin("Debug", null, 0)) {
             _ = imgui.c.ImGui_Checkbox("Wireframe", &wireframe);
         }
