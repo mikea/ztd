@@ -109,8 +109,6 @@ pub const HealthRenderer = struct {
     pub fn renderHealth(self: *@This(), health: f32, destRect: *const Rect) void {
         self.program.use();
         self.program.setFloat("h", health);
-        std.log.debug("health {}", .{health});
-        gl.c.glActiveTexture(gl.c.GL_TEXTURE0);
         self.rectRenderer.render(&self.program, destRect, .MONSTER, 0);
     }
 };
