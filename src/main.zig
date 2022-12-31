@@ -25,6 +25,8 @@ const Statistics = struct {
             @intToFloat(f64, game.monsters.size()) * 1000000000 / @intToFloat(f64, updateDurationNs + renderDurationNs),
         });
 
+        const viewport = imgui.c.ImGui_GetMainViewport();
+        imgui.c.ImGui_SetNextWindowPosEx(.{ .x = viewport.*.Size.x, .y = viewport.*.Size.y}, imgui.c.ImGuiCond_Appearing, .{.x = 1, .y = 1});
         if (imgui.c.ImGui_Begin("Statistics", null, 0)) {
             imgui.c.ImGui_Text(text);
         }
@@ -81,6 +83,7 @@ pub fn main() !void {
         const ticks = @intCast(u64, std.time.milliTimestamp());
         for (gl.pollEvents()) |event| {
             engine.onEvent(&event);
+            try game.onEvent(&event);
         }
 
         var arena = std.heap.ArenaAllocator.init(allocator);
@@ -107,7 +110,7 @@ pub fn main() !void {
                 renderDuration = timer.read();
             }
             try engine.render();
-            try game.render();
+            try game.render(frameAllocator);
         }
 
         try stats.render(ticks, frameAllocator, game, updateDuration, renderDuration);

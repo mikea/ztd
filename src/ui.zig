@@ -1,9 +1,10 @@
 const engine = @import("engine.zig");
 const resources = @import("resources.zig");
 const game = @import("game.zig");
-const sdl = @import("sdl.zig");
 const data = @import("data.zig");
 const std = @import("std");
+const gl = @import("gl.zig");
+const imgui = @import("imgui.zig");
 
 const model = @import("model.zig");
 const Id = model.Id;
@@ -26,7 +27,7 @@ const Action = union(enum) {
 
 const MenuItem = struct {
     text: []const u8,
-    key: sdl.c.SDL_Keycode,
+    key: c_int,
     action: Action,
 };
 
@@ -64,17 +65,17 @@ pub const UI = struct {
         self.menu.deinit();
     }
 
-    pub fn event(self: *@This(), e: *const sdl.Event) !void {
-        switch (e.type) {
-            sdl.c.SDL_KEYDOWN => {
+    pub fn onEvent(self: *@This(), e: *const gl.Event) !void {
+        switch (e.*) {
+            .keyPress => |keyPress| {
                 for (self.menu.items) |*item| {
-                    if (item.key == e.key.keysym.sym) {
+                    if (item.key == keyPress.key) {
                         try self.onAction(item.action);
                         return;
                     }
                 }
             },
-            sdl.c.SDL_MOUSEBUTTONDOWN => {
+            .mouseButton => {
                 switch (self.mode) {
                     // todo: go through onAction
                     Mode.BUILD => {
@@ -91,12 +92,12 @@ pub const UI = struct {
                         self.menu.clearRetainingCapacity();
 
                         if (self.selectedTower != null) {
-                            try self.menu.append(.{ .text = "Upgrade Damage", .key = sdl.c.SDLK_1, .action = .{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } } });
-                            try self.menu.append(.{ .text = "Upgrade Range", .key = sdl.c.SDLK_2, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RANGE } } });
-                            try self.menu.append(.{ .text = "Upgrade Rate", .key = sdl.c.SDLK_3, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RATE } } });
-                            try self.menu.append(.{ .text = "Cancel", .key = sdl.c.SDLK_ESCAPE, .action = .CANCEL });
+                            try self.menu.append(.{ .text = "Upgrade Damage", .key = gl.c.GLFW_KEY_1, .action = .{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } } });
+                            try self.menu.append(.{ .text = "Upgrade Range", .key = gl.c.GLFW_KEY_2, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RANGE } } });
+                            try self.menu.append(.{ .text = "Upgrade Rate", .key = gl.c.GLFW_KEY_3, .action = .{ .UPGRADE_TOWER = .{ .attribute = .RATE } } });
+                            try self.menu.append(.{ .text = "Cancel", .key = gl.c.GLFW_KEY_ESCAPE, .action = .CANCEL });
                         }
-                        try self.menu.append(.{ .text = "Build", .key = sdl.c.SDLK_b, .action = .BUILD_MODE });
+                        try self.menu.append(.{ .text = "Build", .key = gl.c.GLFW_KEY_B, .action = .BUILD_MODE });
                     },
                 }
             },
@@ -113,17 +114,17 @@ pub const UI = struct {
                 for (data.BuildTowers) |tower, i| {
                     try self.menu.append(.{
                         .text = tower.tower.name,
-                        .key = sdl.c.SDLK_1 + @intCast(i32, i),
+                        .key = gl.c.GLFW_KEY_1 + @intCast(i32, i),
                         .action = .{ .SET_TOWER_PROTOTYPE = tower },
                     });
                 }
-                try self.menu.append(.{ .text = "Cancel", .key = sdl.c.SDLK_ESCAPE, .action = Action.CANCEL });
+                try self.menu.append(.{ .text = "Cancel", .key = gl.c.GLFW_KEY_ESCAPE, .action = Action.CANCEL });
             },
             .CANCEL => {
                 self.mode = Mode.SELECT;
                 self.selectedTower = null;
                 self.menu.clearRetainingCapacity();
-                try self.menu.append(.{ .text = "Build", .key = sdl.c.SDLK_b, .action = Action.BUILD_MODE });
+                try self.menu.append(.{ .text = "Build", .key = gl.c.GLFW_KEY_B, .action = Action.BUILD_MODE });
             },
             .SET_TOWER_PROTOTYPE => |tower| {
                 self.towerPrototype = tower;
@@ -164,13 +165,12 @@ pub const UI = struct {
         return towerFinder.tower;
     }
 
-    pub fn update(self: *@This(), frameAllocator: std.mem.Allocator) !void {
+    pub fn update(self: *@This(), _: std.mem.Allocator) !void {
         try self.updateSelection();
         try self.updateBuildShadow();
-        try self.updateText(frameAllocator);
     }
 
-    pub fn updateText(self: *@This(), frameAllocator: std.mem.Allocator) !void {
+    pub fn render(self: *@This(), frameAllocator: std.mem.Allocator) !void {
         var textArray = std.ArrayList(u8).init(frameAllocator);
         var writer = textArray.writer();
         try self.printStatus(writer);
@@ -178,8 +178,10 @@ pub const UI = struct {
         try self.printMenu(writer);
         try textArray.append(0);
 
-        try self.engine.setText(self.textId, textArray.items[0..(textArray.items.len - 1) :0], .{ .x = 0, .y = 0 }, engine.Alignment.LEFT, .{ .r = 0, .g = 0, .b = 0, .a = 255 }, self.resources.rubik20);
+        const text = textArray.items[0..(textArray.items.len - 1) :0];
+        imgui.c.ImGui_Text(text);
     }
+
 
     fn printStatus(self: *@This(), writer: anytype) !void {
         try writer.print("monsters {}\n", .{self.game.monsters.size()});
@@ -203,7 +205,7 @@ pub const UI = struct {
 
     fn printMenu(self: *@This(), writer: anytype) !void {
         for (self.menu.items) |*item| {
-            if (item.key == sdl.c.SDLK_ESCAPE) {
+            if (item.key == gl.c.GLFW_KEY_ESCAPE) {
                 try writer.writeAll("ESC");
             } else {
                 try writer.writeAll(&[_]u8{@intCast(u8, item.key)});
@@ -220,9 +222,11 @@ pub const UI = struct {
                     const pos = (self.engine.bounds.get(towerEntry.id)).center();
                     const attacker = self.game.attackers.get(towerEntry.id);
                     const range = attacker.range;
-                    const c = try sdl.drawCircle(self.engine.renderer, range, .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 }, .{ .stroke = .{ .w = 0.5 } });
-                    try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, c.w), @intToFloat(f32, c.h)));
-                    try self.engine.sprites.set(self.selId, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angleRad = 0, .z = .UI });
+                    // const c = try sdl.drawCircle(self.engine.renderer, range, .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 }, .{ .stroke = .{ .w = 0.5 } });
+                    // try self.engine.bounds.set(self.selId, Rect.initCentered(pos.x, pos.y, @intToFloat(f32, c.w), @intToFloat(f32, c.h)));
+                    // try self.engine.sprites.set(self.selId, .{ .texture = c.texture, .src = .{ .x = 0, .y = 0, .w = c.w, .h = c.h }, .angleRad = 0, .z = .UI });
+                    _ = range;
+                    _ = pos;
                     return;
                 }
             }
@@ -234,16 +238,17 @@ pub const UI = struct {
     }
 
     fn updateBuildShadow(self: *@This()) !void {
-        if (self.mode == Mode.BUILD) {
-            const towerPrototype = self.towerPrototype;
-            const towerSheet = self.game.resources.getSheet(towerPrototype.sheet);
-            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
-            const sprite = towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
-            try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(towerSheet.w, towerSheet.h)));
-            try self.engine.sprites.set(self.shadowId, sprite);
-        } else {
-            self.engine.bounds.delete(self.shadowId);
-            self.engine.sprites.delete(self.shadowId);
-        }
+        _ = self;
+        // if (self.mode == Mode.BUILD) {
+        //     const towerPrototype = self.towerPrototype;
+        //     const towerSheet = self.game.resources.getSheet(towerPrototype.sheet);
+        //     const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
+        //     const sprite = towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
+        //     try self.engine.bounds.set(self.shadowId, Rect.centered(pos, Vec.initInt(towerSheet.w, towerSheet.h)));
+        //     try self.engine.sprites.set(self.shadowId, sprite);
+        // } else {
+        //     self.engine.bounds.delete(self.shadowId);
+        //     self.engine.sprites.delete(self.shadowId);
+        // }
     }
 };

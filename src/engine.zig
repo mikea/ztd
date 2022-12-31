@@ -108,31 +108,13 @@ pub const Engine = struct {
         try self.ids.free(id);
     }
 
-    // pub fn nextEvent(self: *Engine) ?sdl.c.SDL_Event {
-    //     var event: sdl.c.SDL_Event = undefined;
-    //     while (sdl.c.SDL_PollEvent(&event) != 0) {
-    //         switch (event.type) {
-    //             sdl.c.SDL_QUIT => self.running = false,
-    //             sdl.c.SDL_KEYDOWN => switch (event.key.keysym.sym) {
-    //                 sdl.c.SDLK_q => self.running = false,
-    //                 else => {},
-    //             },
-    //             sdl.c.SDL_MOUSEMOTION => {
-    //                 const screenPos = Vec{ .x = @intToFloat(f32, event.motion.x), .y = @intToFloat(f32, event.motion.y) };
-    //                 self.mousePos = self.viewport.screenToGame(screenPos);
-    //             },
-    //             else => {},
-    //         }
-
-    //         self.viewport.onEvent(&event);
-
-    //         return event;
-    //     }
-
-    //     return null;
-    // }
-
     pub fn onEvent(self: *Engine, event: *const gl.Event) void {
+        switch (event.*) {
+            .mouseButton => {
+                self.mousePos = self.viewport.screenToGame(gl.getCursorPos(self.window));
+            },
+            else => {},
+        }
         self.viewport.onEvent(event);
     }
 

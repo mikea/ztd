@@ -21,6 +21,10 @@ pub const Event = union(enum) {
         dx: f64,
         dy: f64,
     },
+    mouseButton: struct {
+        action: enum { press },
+        button: enum { left, right },
+    },
 };
 
 var events: std.ArrayList(Event) = undefined;
@@ -62,6 +66,7 @@ pub fn init(allocator: std.mem.Allocator) !*c.GLFWwindow {
 
     _ = c.glfwSetKeyCallback(window, onKey);
     _ = c.glfwSetScrollCallback(window, onScroll);
+    _ = c.glfwSetMouseButtonCallback(window, onMouseButton);
 
     return window;
 }
@@ -110,4 +115,23 @@ fn onKey(_: ?*c.GLFWwindow, key: c_int, _: c_int, action: c_int, _: c_int) callc
 
 fn onScroll(_: ?*c.GLFWwindow, dx: f64, dy: f64) callconv(.C) void {
     events.append(.{ .mouseWheel = .{ .dx = dx, .dy = dy } }) catch @panic("can't add events");
+}
+
+fn onMouseButton(_: ?*c.GLFWwindow, button: c_int, action: c_int, _: c_int) callconv(.C) void {
+    if (action == c.GLFW_PRESS) {
+        events.append(.{ .mouseButton = .{
+            .button = switch (button) {
+                c.GLFW_MOUSE_BUTTON_RIGHT => .right,
+                else => .left,
+            },
+            .action = .press,
+        } }) catch @panic("can't add events");
+    }
+}
+
+pub fn getCursorPos(window: *c.GLFWwindow) Vec {
+    var xpos: f64 = undefined;
+    var ypos: f64 = undefined;
+    c.glfwGetCursorPos(window, &xpos, &ypos);
+    return Vec.init(@floatCast(f32, xpos), @floatCast(f32, ypos));
 }

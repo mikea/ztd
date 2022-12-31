@@ -2,7 +2,8 @@ const std = @import("std");
 const engine = @import("engine.zig");
 const resources = @import("resources.zig");
 const data = @import("data.zig");
-// const ui = @import("ui.zig");
+const ui = @import("ui.zig");
+const gl = @import("gl.zig");
 const builtin = @import("builtin");
 
 const table = @import("table.zig");
@@ -31,7 +32,7 @@ pub const Game = struct {
     towers: model.TowersTable,
     monsters: model.MonstersTable,
 
-    // ui: ui.UI = undefined,
+    ui: ui.UI = undefined,
     towersUpdated: bool = false,
     money: u64 = 10,
     towerPrice: u64 = 10,
@@ -46,7 +47,7 @@ pub const Game = struct {
             .monsters = try model.MonstersTable.init(allocator),
             .projectiles = try model.ProjectilesTable.init(allocator),
         };
-        // game.ui = try ui.UI.init(allocator, game);
+        game.ui = try ui.UI.init(allocator, game);
         return game;
     }
 
@@ -55,7 +56,7 @@ pub const Game = struct {
         self.towers.deinit();
         self.projectiles.deinit();
         self.attackers.deinit();
-        // self.ui.deinit();
+        self.ui.deinit();
     }
 
     fn delete(self: *Game, id: Id) !void {
@@ -94,10 +95,6 @@ pub const Game = struct {
         try self.engine.sprites.set(id, (self.resources.getSheet(d.sheet)).sprite(d.sprite.x, d.sprite.y, 0, .TOWER));
         self.towersUpdated = true;
     }
-
-    // pub fn event(self: *Game, e: *const sdl.Event) !void {
-    //     try self.ui.event(e);
-    // }
 
     fn updateTowerTargets(self: *Game) !void {
         // update closest monsters
@@ -223,7 +220,7 @@ pub const Game = struct {
         };
         const sheet = self.resources.getSheet(projectile.sheet);
         try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.angle });
-        try self.engine.bounds.set(id, Rect.initCentered(pos, .{ .x = 8, .y = 8 }));
+        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.w, sheet.h)));
         try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
     }
 
@@ -437,12 +434,25 @@ pub const Game = struct {
             std.c.exit(0);
         }
 
-        // try self.ui.update(frameAllocator);
+        try self.ui.update(frameAllocator);
 
         self.lastTicks = ticks;
         self.towersUpdated = false;
         self.frame += 1;
     }
 
-    pub fn render(_: *Game) !void {}
+    pub fn render(self: *Game, frameAllocator: std.mem.Allocator) !void {
+        try self.ui.render(frameAllocator);
+    }
+
+    pub fn onEvent(self: *Game, event: *const gl.Event) !void {
+        switch (event.*) {
+            .keyPress => |keyPress| switch (keyPress.key) {
+                gl.c.GLFW_KEY_Q => std.c.exit(0),
+                else => {},
+            },
+            else => {},
+        }
+        try self.ui.onEvent(event);
+    }
 };

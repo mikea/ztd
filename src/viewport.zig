@@ -44,6 +44,13 @@ pub const Viewport = struct {
         };
     }
 
+    // screen coordinates origin is top-left
+    pub fn screenToGame(self: *const Viewport, v: Vec) Vec {
+        const size = gl.framebufferSize(self.window);
+        const s = self.scale;
+        return self.center.add(.{ .x = s * (v.x - size.x / 2), .y = s * (size.y / 2 - v.y) });
+    }
+
     pub fn onEvent(self: *Viewport, event: *const gl.Event) void {
         const mouseZoom = 1.1;
         const kbdZoom = 1.7;
@@ -73,6 +80,7 @@ pub const Viewport = struct {
             .mouseWheel => |mouseWheel| {
                 self.scale *= if (mouseWheel.dy > 0) mouseZoom else 1.0 / mouseZoom;
             },
+            else => {},
         }
         self.update();
     }
