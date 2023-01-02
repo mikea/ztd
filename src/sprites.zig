@@ -37,8 +37,8 @@ pub const SpriteSheet = struct {
 
         gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_S, gl.c.GL_CLAMP_TO_EDGE);
         gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_T, gl.c.GL_CLAMP_TO_EDGE);
-        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MIN_FILTER, gl.c.GL_LINEAR_MIPMAP_LINEAR);
-        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MAG_FILTER, gl.c.GL_LINEAR);
+        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MIN_FILTER, gl.c.GL_NEAREST_MIPMAP_NEAREST);
+        gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MAG_FILTER, gl.c.GL_NEAREST_MIPMAP_NEAREST);
         gl.c.glTexImage2D(gl.c.GL_TEXTURE_2D, 0, gl.c.GL_RGBA, width, height, 0, gl.c.GL_RGBA, gl.c.GL_UNSIGNED_BYTE, img);
         gl.c.glGenerateMipmap(gl.c.GL_TEXTURE_2D);
 
@@ -57,12 +57,13 @@ pub const SpriteSheet = struct {
     }
 
     pub fn sprite(self: *const @This(), x: u16, y: u16, angle: f32, z: model.Layer) model.Sprite {
+        const sz = Vec.initInt(self.w, self.h).div(Vec.initInt(self.fullWidth, self.fullHeight));
+
         return .{
             .texture = self.texture,
-            .src = Rect.initSized(Vec.initInt(x * self.w, y * self.h), Vec.initInt(self.w, self.h)),
+            .rect = Rect.initSized(Vec.initInt(x, y).mul(sz) , sz),
             .angle = angle + self.angle,
             .z = z,
-            .sheet = self,
         };
     }
 };
@@ -91,17 +92,8 @@ pub const SpriteRenderer = struct {
     pub fn renderSprite(self: *@This(), sprite: *const model.Sprite, destRect: *const Rect) void {
         self.program.use();
 
-        const size = sprite.src.size();
-        const texScale = [2]gl.c.GLfloat{
-            size.x / @intToFloat(gl.c.GLfloat, sprite.sheet.fullWidth),
-            size.y / @intToFloat(gl.c.GLfloat, sprite.sheet.fullHeight),
-        };
-        const texOffset = [2]gl.c.GLfloat{
-            sprite.src.a.x / @intToFloat(gl.c.GLfloat, sprite.sheet.fullWidth),
-            sprite.src.a.y / @intToFloat(gl.c.GLfloat, sprite.sheet.fullHeight),
-        };
-        self.program.setVec2("texScale", texScale);
-        self.program.setVec2("texOffset", texOffset);
+        self.program.setVec2("texScale", sprite.rect.size().asArray());
+        self.program.setVec2("texOffset", sprite.rect.a.asArray());
 
         gl.c.glActiveTexture(gl.c.GL_TEXTURE0);
         gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, sprite.texture);

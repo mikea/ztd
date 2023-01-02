@@ -4,6 +4,7 @@ const resources = @import("resources.zig");
 const data = @import("data.zig");
 const ui = @import("ui.zig");
 const gl = @import("gl.zig");
+const truetype = @import("truetype.zig");
 const builtin = @import("builtin");
 
 const table = @import("table.zig");
@@ -281,14 +282,10 @@ pub const Game = struct {
                 const angle: f32 = 2 * std.math.pi * rnd.random().float(f32);
                 const id = self.engine.ids.nextId();
                 const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
+                const sprite = sheet.sprite(0, 0, angle, .PROJECTILE);
+
                 try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.w, sheet.h).scale(1.0 / 4.0)));
-                try self.engine.sprites.set(id, .{
-                    .texture = sheet.texture,
-                    .src = Rect.init(0, 0, @intToFloat(f32, sheet.w), @intToFloat(f32, sheet.h)),
-                    .angle = angle + sheet.angle,
-                    .z = .PROJECTILE,
-                    .sheet = sheet,
-                });
+                try self.engine.sprites.set(id, sprite);
                 try self.engine.particles.set(id, .{
                     .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
                     .startTicks = ticks,
@@ -337,27 +334,25 @@ pub const Game = struct {
             std.debug.assert(health.futureDamage >= 0);
         }
         const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(u64, damage)});
-        // const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 179, .g = 14, .b = 8, .a = 255 });
-        // const bounds = self.engine.bounds.get(id);
-        // const pos = bounds.center();
-        // const damageId = self.engine.ids.nextId();
+        const texture = try truetype.renderText(text, 8, frameAllocator);
 
-        // try self.engine.bounds.set(damageId, Rect.centered(pos, Vec.initInt(texture.w, texture.h).scale(0.75)));
-        // try self.engine.sprites.set(damageId, .{
-        //     .texture = texture.texture,
-        //     .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
-        //     .angleRad = 0,
-        //     .z = .DAMAGE,
-        // });
-        // try self.engine.particles.set(damageId, .{
-        //     .startTicks = ticks,
-        //     .v = .{ .x = 0, .y = -20 + rnd.random().floatNorm(f32) },
-        //     .endTicks = ticks + 400,
-        //     .onComplete = .FREE_TEXTURE,
-        // });
-        _ = text;
-        _ = ticks;
-        // @panic("not implemented");
+        const bounds = self.engine.bounds.get(id);
+        const pos = bounds.center();
+        const damageId = self.engine.ids.nextId();
+
+        try self.engine.bounds.set(damageId, Rect.initCentered(pos, Vec.initInt(texture.w, texture.h).scale(1)));
+        try self.engine.sprites.set(damageId, .{
+            .texture = texture.texture,
+            .rect = Rect.initInt(0, 0, 1, 1),
+            .angle = 0,
+            .z = .DAMAGE,
+        });
+        try self.engine.particles.set(damageId, .{
+            .startTicks = ticks,
+            .v = .{ .x = 0, .y = 20 + rnd.random().floatNorm(f32) },
+            .endTicks = ticks + 400,
+            .onComplete = .FREE_TEXTURE,
+        });
     }
 
     fn updateDead(self: *Game, ticks: u64, frameAllocator: std.mem.Allocator) !void {

@@ -8,7 +8,7 @@ pub const Vec = struct {
         return .{ .x = x, .y = y };
     }
 
-    pub fn initInt(x: i32, y: i32) Vec {
+    pub fn initInt(x: anytype, y: anytype) Vec {
         return .{ .x = @intToFloat(f32, x), .y = @intToFloat(f32, y) };
     }
 
@@ -42,6 +42,10 @@ pub const Vec = struct {
 
     pub fn mul(v1: Vec, v2: Vec) Vec {
         return .{ .x = v1.x * v2.x, .y = v1.y * v2.y };
+    }
+
+    pub fn div(v1: Vec, v2: Vec) Vec {
+        return .{ .x = v1.x / v2.x, .y = v1.y / v2.y };
     }
 
     pub fn scale(self: *const Vec, a: f32) Vec {
@@ -95,6 +99,10 @@ pub const Vec = struct {
     pub fn grid(self: *const Vec, gridX: f32, gridY: f32) Vec {
         return .{ .x = gridX * @round(self.x / gridX), .y = gridY * @round(self.y / gridY) };
     }
+
+    pub fn asArray(self: *const Vec) [2]f32 {
+        return [_]f32{ self.x, self.y };
+    }
 };
 
 pub const Rect = struct {
@@ -103,6 +111,13 @@ pub const Rect = struct {
 
     pub fn init(x1: f32, y1: f32, x2: f32, y2: f32) Rect {
         return .{ .a = .{ .x = x1, .y = y1 }, .b = .{ .x = x2, .y = y2 } };
+    }
+
+    pub fn initInt(x1: anytype, y1: anytype, x2: anytype, y2: anytype) Rect {
+        return .{
+            .a = .{ .x = @intToFloat(f32, x1), .y = @intToFloat(f32, y1) },
+            .b = .{ .x = @intToFloat(f32, x2), .y = @intToFloat(f32, y2) },
+        };
     }
 
     pub fn initCentered(c: Vec, aSize: Vec) Rect {
@@ -136,7 +151,7 @@ pub const Rect = struct {
     }
 
     pub fn translate(self: *const Rect, v: Vec) Rect {
-        return .{ .a = .{.x = self.a.x + v.x, .y = self.a.y + v.y }, .b = .{.x = self.b.x + v.x, .y = self.b.y + v.y } };
+        return .{ .a = .{ .x = self.a.x + v.x, .y = self.a.y + v.y }, .b = .{ .x = self.b.x + v.x, .y = self.b.y + v.y } };
     }
 
     pub fn height(self: *const Rect) f32 {

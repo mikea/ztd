@@ -151,9 +151,8 @@ pub const Engine = struct {
                 switch (particle.onComplete) {
                     .DO_NOTHING => {},
                     .FREE_TEXTURE => {
-                        // const sprite = self.sprites.get(entry.id);
-                        // sdl.c.SDL_DestroyTexture(sprite.texture);
-                        @panic("not implemented");
+                        const sprite = self.sprites.get(entry.id);
+                        gl.c.glDeleteTextures(1, &sprite.texture);
                     },
                 }
                 continue;

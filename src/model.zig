@@ -100,8 +100,8 @@ pub const Layer = enum {
 
 pub const Sprite = struct {
     texture: gl.c.GLuint,
-    src: Rect,
-    sheet: *const sprites.SpriteSheet,
+    // region in texCoords space of the texture that needs to be displayed
+    rect: Rect,
     angle: f32,
     z: Layer,
 };
