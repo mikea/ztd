@@ -334,7 +334,7 @@ pub const Game = struct {
             std.debug.assert(health.futureDamage >= 0);
         }
         const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(u64, damage)});
-        const texture = try truetype.renderText(text, 8, frameAllocator);
+        const texture = try self.resources.rubik.renderTexture(text, 8, frameAllocator);
 
         const bounds = self.engine.bounds.get(id);
         const pos = bounds.center();

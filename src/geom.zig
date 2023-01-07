@@ -136,10 +136,7 @@ pub const Rect = struct {
         // (X1,Y1) = (r2.a.x, r2.a.y)
         // (A1,B1) = (r2.b.x, r2.b.y)
         // A<X1 or A1<X or B<Y1 or B1<Y
-        if ((r1.b.x < r2.a.x) or (r2.b.x < r1.a.x) or (r1.b.y < r2.a.y) or (r2.b.y < r1.a.y)) {
-            return false;
-        }
-        return true;
+        return ((r1.b.x >= r2.a.x) and (r2.b.x >= r1.a.x) and (r1.b.y >= r2.a.y) and (r2.b.y >= r1.a.y));
     }
 
     pub fn size(self: *const Rect) Vec {

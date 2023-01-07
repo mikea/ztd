@@ -1,6 +1,7 @@
 const std = @import("std");
 const gl = @import("gl.zig");
 const sprites = @import("sprites.zig");
+const truetype = @import("truetype.zig");
 
 pub const SpriteSheets = enum {
     ARCHER_GOBLIN,
@@ -23,8 +24,7 @@ pub const Resources = struct {
     const sheetSize = @typeInfo(SpriteSheets).Enum.fields.len;
 
     sheets: [sheetSize]sprites.SpriteSheet,
-    // rubik20: *sdl.c.TTF_Font,
-    // rubik8: *sdl.c.TTF_Font,
+    rubik: truetype.FontInfo,
 
     pub fn init() !Resources {
         var sheets: [sheetSize]sprites.SpriteSheet = undefined;
@@ -33,8 +33,7 @@ pub const Resources = struct {
         }
         return .{
             .sheets = sheets,
-            // .rubik20 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 20)),
-            // .rubik8 = checkNotNull(sdl.c.TTF_Font, sdl.c.TTF_OpenFont("res/RubikMonoOne-Regular.ttf", 8)),
+            .rubik = try truetype.FontInfo.init(@embedFile("res/RubikMonoOne-Regular.ttf")),
         };
     }
 
@@ -42,8 +41,6 @@ pub const Resources = struct {
         for (self.sheets) |*sheet| {
             sheet.deinit();
         }
-        // sdl.c.TTF_CloseFont(self.rubik20);
-        // sdl.c.TTF_CloseFont(self.rubik8);
     }
 
     pub fn getSheet(self: *@This(), sheet: SpriteSheets) *const sprites.SpriteSheet {

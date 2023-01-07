@@ -43,7 +43,7 @@ pub fn Rects(comptime cap: usize, comptime blockSize: usize) type {
         }
 
         pub fn intersects(self: *const @This(), i: usize, rect: Rect) bool {
-            return self.get(i).intersects(rect);
+            return ((self.bx[i] >= rect.a.x) and (rect.b.x >= self.ax[i]) and (self.by[i] >= rect.a.y) and (rect.b.y >= self.ay[i]));
         }
 
         pub fn containsVec(self: *const @This(), i: usize, p: Vec) bool {
@@ -136,7 +136,6 @@ pub fn Rects(comptime cap: usize, comptime blockSize: usize) type {
                 return idx;
             }
 
-
             // SIMD instructions of the following code:
             // var i: usize = 0;
             // while (i < self.len) : (i += 1) {
@@ -173,7 +172,6 @@ pub fn Rects(comptime cap: usize, comptime blockSize: usize) type {
                 const bx: F = self.bx[offset..][0..blockSize].*;
                 const by: F = self.by[offset..][0..blockSize].*;
 
-
                 // r.add(rect)
 
                 // return .{ .a = .{
@@ -193,7 +191,7 @@ pub fn Rects(comptime cap: usize, comptime blockSize: usize) type {
                 const delta = perim1 - perim;
 
                 var i: usize = 0;
-                while (i < blockSize) : (i+=1) {
+                while (i < blockSize) : (i += 1) {
                     if (i + offset > self.len) {
                         break;
                     }
@@ -290,4 +288,3 @@ pub fn Rects(comptime cap: usize, comptime blockSize: usize) type {
         }
     };
 }
-
