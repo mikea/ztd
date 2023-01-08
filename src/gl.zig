@@ -144,4 +144,8 @@ pub fn getCursorPos(window: *c.GLFWwindow) Vec {
     return Vec.init(@floatCast(f32, xpos), @floatCast(f32, ypos));
 }
 
-
+pub fn genBuffer() c.GLuint {
+    var buffer: c.GLuint = 0;
+    c.glGenBuffers(1, &buffer);
+    return buffer;
+}

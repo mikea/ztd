@@ -221,7 +221,7 @@ pub const Game = struct {
         };
         const sheet = self.resources.getSheet(projectile.sheet);
         try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.angle });
-        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.w, sheet.h)));
+        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.spriteWidth, sheet.spriteHeight)));
         try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
     }
 
@@ -284,7 +284,7 @@ pub const Game = struct {
                 const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
                 const sprite = sheet.sprite(0, 0, angle, .PROJECTILE);
 
-                try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.w, sheet.h).scale(1.0 / 4.0)));
+                try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.spriteWidth, sheet.spriteHeight).scale(1.0 / 4.0)));
                 try self.engine.sprites.set(id, sprite);
                 try self.engine.particles.set(id, .{
                     .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
@@ -342,7 +342,6 @@ pub const Game = struct {
 
         try self.engine.bounds.set(damageId, Rect.initCentered(pos, Vec.initInt(texture.w, texture.h).scale(1)));
         try self.engine.sprites.set(damageId, .{
-            .texture = texture.texture,
             .rect = Rect.initInt(0, 0, 1, 1),
             .angle = 0,
             .z = .DAMAGE,
@@ -351,7 +350,7 @@ pub const Game = struct {
             .startTicks = ticks,
             .v = .{ .x = 0, .y = 20 + rnd.random().floatNorm(f32) },
             .endTicks = ticks + 400,
-            .onComplete = .FREE_TEXTURE,
+            .onComplete = .DO_NOTHING,
         });
     }
 

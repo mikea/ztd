@@ -21,7 +21,7 @@ const Statistics = struct {
             1000 / (ticks - self.lastTicks),
             @intToFloat(f64, updateDurationNs) / 1000000,
             @intToFloat(f64, renderDurationNs) / 1000000,
-            game.engine.renderedSprites,
+            game.engine.spriteRenderer.rects.items.len / 4,
             @intToFloat(f64, game.monsters.size()) * 1000000000 / @intToFloat(f64, updateDurationNs + renderDurationNs),
         });
 
@@ -51,10 +51,10 @@ pub fn main() !void {
     var ui = try imgui.init(window);
     defer ui.deinit();
 
-    var resources = try Resources.init();
-    defer resources.deinit();
+    var resources = try Resources.init(allocator);
+    defer resources.deinit(allocator);
 
-    var engine = try Engine.init(allocator, window);
+    var engine = try Engine.init(allocator, window, &resources.atlas);
     defer engine.deinit();
 
     var game = try Game.init(allocator, &engine, &resources);

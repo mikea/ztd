@@ -56,9 +56,10 @@ pub const Engine = struct {
     const AnimationsTable = table.Table(Id, maxId, model.Animation);
 
     window: *gl.c.GLFWwindow,
+    atlas: *sprites.Atlas,
 
     viewport: Viewport,
-    spriteRenderer: sprites.SpriteRenderer,
+    spriteRenderer: sprites.BatchSpriteRenderer,
     healthRenderer: rendering.HealthRenderer,
 
     // tables
@@ -73,14 +74,14 @@ pub const Engine = struct {
     ids: IdManager,
     running: bool = true,
     mousePos: Vec = .{ .x = 0, .y = 0 },
-    renderedSprites: usize = 0,
 
-    pub fn init(allocator: std.mem.Allocator, window: *gl.c.GLFWwindow) !Engine {
+    pub fn init(allocator: std.mem.Allocator, window: *gl.c.GLFWwindow, atlas: *sprites.Atlas) !Engine {
         return .{
             .window = window,
+            .atlas = atlas,
             .ids = try IdManager.init(allocator),
             .viewport = Viewport.init(window),
-            .spriteRenderer = try sprites.SpriteRenderer.init(),
+            .spriteRenderer = try sprites.BatchSpriteRenderer.init(allocator),
             .healthRenderer = try rendering.HealthRenderer.init(),
             .toDelete = try SparseSet(Id, maxId, void).init(allocator),
             .bounds = try BoundsTable.init(allocator),
@@ -151,8 +152,9 @@ pub const Engine = struct {
                 switch (particle.onComplete) {
                     .DO_NOTHING => {},
                     .FREE_TEXTURE => {
-                        const sprite = self.sprites.get(entry.id);
-                        gl.c.glDeleteTextures(1, &sprite.texture);
+                        // const sprite = self.sprites.get(entry.id);
+                        // gl.c.glDeleteTextures(1, &sprite.texture);
+                        @panic("not implemented");
                     },
                 }
                 continue;
@@ -168,31 +170,41 @@ pub const Engine = struct {
 
         self.viewport.update();
         try self.renderSprites();
+        try self.renderHealth();
     }
 
     fn renderSprites(self: *Engine) !void {
-        self.renderedSprites = 0;
         self.spriteRenderer.startFrame(&self.viewport);
+
+        var visitor: struct {
+            engine: *Engine,
+            pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
+                if (s.engine.sprites.find(id)) |sprite| {
+                    try s.engine.spriteRenderer.addSprite(sprite, &rect);
+                }
+            }
+        } = .{ .engine = self };
+
+        try self.bounds.findIntersect(self.viewport.view, @TypeOf(visitor), &visitor, @TypeOf(visitor).callback);
+        try self.spriteRenderer.render(self.atlas);
+    }
+
+    fn renderHealth(self: *Engine) !void {
         self.healthRenderer.startFrame(&self.viewport);
 
         var renderer: struct {
             engine: *Engine,
 
-            pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
-                if (s.engine.sprites.find(id)) |sprite| {
-                    s.engine.renderedSprites += 1;
-                    s.engine.spriteRenderer.renderSprite(sprite, &rect);
-
-                    if (s.engine.healths.find(id)) |health| {
-                        if (health.*.health < health.*.maxHealth) {
-                            // display health underneath the main sprite
-                            const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
-                            const healthRect = Rect{
-                                .a = .{ .x = rect.a.x, .y = rect.a.y - 1 },
-                                .b = .{ .x = rect.b.x, .y = rect.a.y },
-                            };
-                            s.engine.healthRenderer.renderHealth(healthRatio, &healthRect);
-                        }
+            pub fn callback(s: *@This(), id: Id, rect: Rect) !void {
+                if (s.engine.healths.find(id)) |health| {
+                    if (health.*.health < health.*.maxHealth) {
+                        // display health underneath the main sprite
+                        const healthRatio = std.math.max(health.*.health, 0) / health.*.maxHealth;
+                        const healthRect = Rect{
+                            .a = .{ .x = rect.a.x, .y = rect.a.y - 1 },
+                            .b = .{ .x = rect.b.x, .y = rect.a.y },
+                        };
+                        s.engine.healthRenderer.renderHealth(healthRatio, &healthRect);
                     }
                 }
             }

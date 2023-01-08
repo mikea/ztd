@@ -10,6 +10,8 @@ pub const maxId: usize = 1 << 19;
 
 // row types definitions
 
+pub const Sprite = sprites.Sprite;
+
 pub const Health = struct {
     maxHealth: f32,
     health: f32,
@@ -98,13 +100,6 @@ pub const Layer = enum {
     UI,
 };
 
-pub const Sprite = struct {
-    texture: gl.c.GLuint,
-    // region in texCoords space of the texture that needs to be displayed
-    rect: Rect,
-    angle: f32,
-    z: Layer,
-};
 
 pub const Particle = struct {
     v: Vec,

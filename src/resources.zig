@@ -23,45 +23,73 @@ pub const SpriteSheets = enum {
 pub const Resources = struct {
     const sheetSize = @typeInfo(SpriteSheets).Enum.fields.len;
 
-    sheets: [sheetSize]sprites.SpriteSheet,
+    atlas: sprites.Atlas,
     rubik: truetype.FontInfo,
 
-    pub fn init() !Resources {
-        var sheets: [sheetSize]sprites.SpriteSheet = undefined;
-        for (sheets) |_,i| {
-            sheets[i] = try loadSheet(@intToEnum(SpriteSheets, i));
+    pub fn init(allocator: std.mem.Allocator) !Resources {
+        var files: [sheetSize]sprites.SpriteFile = undefined;
+        for (files) |_, i| {
+            files[i] = spriteFile(@intToEnum(SpriteSheets, i));
         }
+        
         return .{
-            .sheets = sheets,
+            .atlas = try sprites.loadAtlas(allocator, &files),
             .rubik = try truetype.FontInfo.init(@embedFile("res/RubikMonoOne-Regular.ttf")),
         };
     }
 
-    pub fn deinit(self: *@This()) void {
-        for (self.sheets) |*sheet| {
-            sheet.deinit();
-        }
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        self.atlas.deinit(allocator);
     }
 
     pub fn getSheet(self: *@This(), sheet: SpriteSheets) *const sprites.SpriteSheet {
-        return &self.sheets[@enumToInt(sheet)];
-    } 
+        return &self.atlas.sheets[@enumToInt(sheet)];
+    }
 };
 
 const pi2 = (std.math.pi / 2.0);
 
-pub fn loadSheet(sheet: SpriteSheets) !sprites.SpriteSheet {
+pub fn spriteFile(sheet: SpriteSheets) sprites.SpriteFile {
     return switch (sheet) {
-        SpriteSheets.ARCHER_GOBLIN => try sprites.SpriteSheet.load("res/MiniWorldSprites/Characters/Monsters/Orcs/ArcherGoblin.png", 16, 16, 0),
-        SpriteSheets.ORC => try sprites.SpriteSheet.load("res/MiniWorldSprites/Characters/Monsters/Orcs/Orc.png", 16, 16, 0),
-        SpriteSheets.RED_DEMON => try sprites.SpriteSheet.load("res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png", 16, 16, 0),
-        SpriteSheets.WOOD_KEEP => try sprites.SpriteSheet.load("res/MiniWorldSprites/Buildings/Wood/Keep.png", 32, 32, 0),
-        SpriteSheets.WOOD_TOWER => try sprites.SpriteSheet.load("res/MiniWorldSprites/Buildings/Wood/Tower.png", 16, 16, 0),
-        SpriteSheets.WOOD_TOWER2 => try sprites.SpriteSheet.load("res/MiniWorldSprites/Buildings/Wood/Tower2.png", 16, 16, 0),
-        SpriteSheets.FIREBALL_PROJECTILE => try sprites.SpriteSheet.load("res/MiniWorldSprites/Objects/FireballProjectile.png", 16, 16, pi2),
-        SpriteSheets.SHORT_ARROW => try sprites.SpriteSheet.load("res/MiniWorldSprites/Objects/ArrowShort.png", 16, 16, pi2),
-        SpriteSheets.LONG_ARROW => try sprites.SpriteSheet.load("res/MiniWorldSprites/Objects/ArrowLong.png", 16, 16, pi2),
-        SpriteSheets.FLAME_PARTICLE => try sprites.SpriteSheet.load("res/particles/flame_06.png", 13, 15, 0),
+        SpriteSheets.ARCHER_GOBLIN => return .{
+            .content = @embedFile("res/MiniWorldSprites/Characters/Monsters/Orcs/ArcherGoblin.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = 0 },
+        },
+        SpriteSheets.ORC => return .{
+            .content = @embedFile("res/MiniWorldSprites/Characters/Monsters/Orcs/Orc.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = 0 },
+        },
+        SpriteSheets.RED_DEMON => return .{
+            .content = @embedFile("res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = 0 },
+        },
+        SpriteSheets.WOOD_KEEP => return .{
+            .content = @embedFile("res/MiniWorldSprites/Buildings/Wood/Keep.png"),
+            .desc = .{ .spriteWidth = 32, .spriteHeight = 32, .angle = 0 },
+        },
+        SpriteSheets.WOOD_TOWER => return .{
+            .content = @embedFile("res/MiniWorldSprites/Buildings/Wood/Tower.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = 0 },
+        },
+        SpriteSheets.WOOD_TOWER2 => return .{
+            .content = @embedFile("res/MiniWorldSprites/Buildings/Wood/Tower2.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = 0 },
+        },
+        SpriteSheets.FIREBALL_PROJECTILE => return .{
+            .content = @embedFile("res/MiniWorldSprites/Objects/FireballProjectile.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = pi2 },
+        },
+        SpriteSheets.SHORT_ARROW => return .{
+            .content = @embedFile("res/MiniWorldSprites/Objects/ArrowShort.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = pi2 },
+        },
+        SpriteSheets.LONG_ARROW => return .{
+            .content = @embedFile("res/MiniWorldSprites/Objects/ArrowLong.png"),
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = pi2 },
+        },
+        SpriteSheets.FLAME_PARTICLE => return .{
+            .content = @embedFile("res/particles/flame_06.png"),
+            .desc = .{ .spriteWidth = 13, .spriteHeight = 15, .angle = 0 },
+        },
     };
 }
-

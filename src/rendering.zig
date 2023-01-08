@@ -6,6 +6,18 @@ const Rect = @import("geom.zig").Rect;
 const Vec = @import("geom.zig").Vec;
 const model = @import("model.zig");
 
+// y axis of texture is flipped to account for flipped images when loaded
+const quadVertices = [_]gl.c.GLfloat{
+    // pos    // tex
+    0.0, 1.0, 0.0, 0.0,
+    1.0, 0.0, 1.0, 1.0,
+    0.0, 0.0, 0.0, 1.0,
+
+    0.0, 1.0, 0.0, 0.0,
+    1.0, 1.0, 1.0, 0.0,
+    1.0, 0.0, 1.0, 1.0,
+};
+
 // Renders rectangles in a game space with a given shader program.
 pub const RectRenderer = struct {
     vao: gl.c.GLuint,
@@ -16,28 +28,14 @@ pub const RectRenderer = struct {
 
         gl.c.glEnable(gl.c.GL_DEPTH_TEST);
 
-        var vbo: gl.c.GLuint = 0;
-        gl.c.glGenBuffers(1, &vbo);
+        const vbo = gl.genBuffer();
 
         var vao: gl.c.GLuint = 0;
         gl.c.glGenVertexArrays(1, &vao);
 
-        // y axis of texture is flipped to account for flipped images when loaded
-        const vertices = [_]gl.c.GLfloat{
-            // pos    // tex
-            0.0, 1.0, 0.0, 0.0,
-            1.0, 0.0, 1.0, 1.0,
-            0.0, 0.0, 0.0, 1.0,
-
-            0.0, 1.0, 0.0, 0.0,
-            1.0, 1.0, 1.0, 0.0,
-            1.0, 0.0, 1.0, 1.0,
-        };
-
         gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, vbo);
         defer gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, 0);
-
-        gl.c.glBufferData(gl.c.GL_ARRAY_BUFFER, vertices.len * @sizeOf(gl.c.GLfloat), &vertices, gl.c.GL_STATIC_DRAW);
+        gl.c.glBufferData(gl.c.GL_ARRAY_BUFFER, quadVertices.len * @sizeOf(gl.c.GLfloat), &quadVertices, gl.c.GL_STATIC_DRAW);
 
         gl.c.glBindVertexArray(vao);
         defer gl.c.glBindVertexArray(0);
@@ -52,31 +50,14 @@ pub const RectRenderer = struct {
         gl.c.glDeleteVertexArrays(1, &self.vao);
     }
 
-    pub fn startFrame(_: *@This(), program: *Program, viewport: *Viewport) void {
+    pub fn startFrame(_: *@This(), program: anytype, viewport: *Viewport) void {
         program.use();
-        program.setMatrix4("projection", viewport.mat);
+        program.setMatrix4(.projection, viewport.mat);
     }
 
-    pub fn render(self: *@This(), program: *Program, destRect: *const Rect, layer: model.Layer, angle: f32) void {
+    pub fn render(self: *@This(), program: anytype, destRect: *const Rect, layer: model.Layer, angle: f32) void {
         program.use();
-        const l = destRect.a.x;
-        const b = destRect.a.y;
-        const w = destRect.b.x - l;
-        const h = destRect.b.y - b;
-        const cos = if (angle != 0) std.math.cos(angle) else 1;
-        const sin = if (angle != 0) std.math.sin(angle) else 0;
-        const z = -@intToFloat(f32, @enumToInt(layer)) / @intToFloat(f32, @typeInfo(model.Layer).Enum.fields.len) ;
-
-        // RotationTransform[theta, {l + w/2, b + h/2}].
-        // TranslationTransform[{l, b}] .
-        // ScalingTransform[{w, h}]
-        const modelMat = [16]gl.c.GLfloat{
-            w * cos,                           w * sin,                           0, 0,
-            -h * sin,                          h * cos,                           0, 0,
-            0,                                 0,                                 1, 0,
-            l + 0.5 * (w - w * cos + h * sin), b + 0.5 * (h - h * cos - w * sin), z, 1,
-        };
-        program.setMatrix4("model", modelMat);
+        program.setMatrix4(.model, modelMat(destRect, layer, angle));
 
         gl.c.glBindVertexArray(self.vao);
         defer gl.c.glBindVertexArray(0);
@@ -84,16 +65,36 @@ pub const RectRenderer = struct {
     }
 };
 
+fn modelMat(rect: *const Rect, layer: model.Layer, angle: f32) [16]gl.c.GLfloat {
+    const l = rect.a.x;
+    const b = rect.a.y;
+    const w = rect.b.x - l;
+    const h = rect.b.y - b;
+    const cos = if (angle != 0) std.math.cos(angle) else 1;
+    const sin = if (angle != 0) std.math.sin(angle) else 0;
+    const z = -@intToFloat(f32, @enumToInt(layer)) / @intToFloat(f32, @typeInfo(model.Layer).Enum.fields.len);
+
+    // RotationTransform[theta, {l + w/2, b + h/2}].
+    // TranslationTransform[{l, b}] .
+    // ScalingTransform[{w, h}]
+    return [16]gl.c.GLfloat{
+        w * cos,                           w * sin,                           0, 0,
+        -h * sin,                          h * cos,                           0, 0,
+        0,                                 0,                                 1, 0,
+        l + 0.5 * (w - w * cos + h * sin), b + 0.5 * (h - h * cos - w * sin), z, 1,
+    };
+}
 
 // Renders rectangles with a given shader program.
 pub const HealthRenderer = struct {
+    const Uniforms = enum { model, projection, h };
     rectRenderer: RectRenderer,
-    program: Program,
+    program: Program(Uniforms),
 
     pub fn init() !HealthRenderer {
         return .{
             .rectRenderer = RectRenderer.init(),
-            .program = try Program.init("shaders/healthVertex.glsl", "shaders/healthFragment.glsl"),
+            .program = try Program(Uniforms).init("shaders/healthVertex.glsl", "shaders/healthFragment.glsl"),
         };
     }
 
@@ -108,7 +109,7 @@ pub const HealthRenderer = struct {
 
     pub fn renderHealth(self: *@This(), health: f32, destRect: *const Rect) void {
         self.program.use();
-        self.program.setFloat("h", health);
+        self.program.setFloat(.h, health);
         self.rectRenderer.render(&self.program, destRect, .MONSTER, 0);
     }
 };

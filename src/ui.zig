@@ -81,7 +81,7 @@ pub const UI = struct {
                     Mode.BUILD => {
                         if (self.game.money >= self.game.towerPrice and (try self.findTower(self.engine.mousePos) == null)) {
                             const towerSheet = self.game.resources.getSheet(self.towerPrototype.sheet);
-                            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
+                            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.spriteWidth), @intToFloat(f32, towerSheet.spriteHeight));
                             try self.game.addTower(pos, self.towerPrototype);
                             self.game.money -= self.game.towerPrice;
                             self.game.towerPrice = @floatToInt(usize, std.math.round(@intToFloat(f32, self.game.towerPrice) * 1.1));
@@ -241,9 +241,9 @@ pub const UI = struct {
         if (self.mode == Mode.BUILD) {
             const towerPrototype = self.towerPrototype;
             const towerSheet = self.game.resources.getSheet(towerPrototype.sheet);
-            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.w), @intToFloat(f32, towerSheet.h));
+            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.spriteWidth), @intToFloat(f32, towerSheet.spriteHeight));
             const sprite = towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
-            try self.engine.bounds.set(self.shadowId, Rect.initCentered(pos, Vec.initInt(towerSheet.w, towerSheet.h)));
+            try self.engine.bounds.set(self.shadowId, Rect.initCentered(pos, Vec.initInt(towerSheet.spriteWidth, towerSheet.spriteHeight)));
             try self.engine.sprites.set(self.shadowId, sprite);
         } else {
             self.engine.bounds.delete(self.shadowId);
