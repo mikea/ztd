@@ -342,7 +342,7 @@ pub const Game = struct {
 
         try self.engine.bounds.set(damageId, Rect.initCentered(pos, Vec.initInt(texture.w, texture.h).scale(1)));
         try self.engine.sprites.set(damageId, .{
-            .rect = Rect.initInt(0, 0, 1, 1),
+            .texRect = Rect.initInt(0, 0, 1, 1),
             .angle = 0,
             .z = .DAMAGE,
         });

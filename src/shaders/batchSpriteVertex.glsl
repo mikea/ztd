@@ -2,6 +2,7 @@
 layout (location = 0) in vec4 vertex; // <vec2 position, vec2 texCoords>
 layout (location = 1) in vec4 rect; // <minx, miny, maxx, maxy> in game coordinates
 layout (location = 2) in vec2 angleLayer; // <angle radians, layer>
+layout (location = 3) in vec4 texRect; // <minx, miny, maxx, maxy> in texture coordinates
 
 out vec2 texCoords;
 
@@ -27,7 +28,9 @@ void main()
         vec4(0,                               0,                               1, 0),
         vec4(l + 0.5 * (w - w * co + h * si), b + 0.5 * (h - h * co - w * si), z, 1)
     );
-    // texCoords = texScale * vertex.zw + texOffset;
-    texCoords = vertex.zw;
+
+    vec2 texOffset = texRect.xy;
+    vec2 texScale = texRect.zw - texRect.xy;
+    texCoords = texScale * vertex.zw + texOffset;
     gl_Position = projection * model * vec4(vertex.xy, 0.0, 1.0);
 }
