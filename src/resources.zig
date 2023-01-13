@@ -61,7 +61,7 @@ pub fn spriteFile(sheet: SpriteSheets) sprites.SpriteFile {
         },
         SpriteSheets.RED_DEMON => return .{
             .content = @embedFile("res/MiniWorldSprites/Characters/Monsters/Demons/RedDemon.png"),
-            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = 0 },
+            .desc = .{ .spriteWidth = 16, .spriteHeight = 16, .angle = 0, .yOffset = 1 },
         },
         SpriteSheets.WOOD_KEEP => return .{
             .content = @embedFile("res/MiniWorldSprites/Buildings/Wood/Keep.png"),

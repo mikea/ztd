@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const main = "src/main.zig";
-
 pub fn build(b: *std.build.Builder) void {
+    const main = b.option([] const u8, "main", "path to main file") orelse "src/main.zig";
+
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 

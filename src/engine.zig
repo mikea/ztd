@@ -2,6 +2,7 @@ const std = @import("std");
 const table = @import("table.zig");
 const sprites = @import("sprites.zig");
 const model = @import("model.zig");
+const data = @import("data.zig");
 const Id = model.Id;
 const maxId = model.maxId;
 
@@ -112,6 +113,16 @@ pub const Engine = struct {
         try self.ids.free(id);
     }
 
+    pub fn addAnimation(self: *Engine, id: Id, rect: Rect, sheet: *const sprites.SpriteSheet, animation: *const data.AnimationData, z: model.Layer) !void {
+        try self.bounds.set(id, rect);
+        try self.animations.set(id, .{ .animationDelay = animation.delay, .i = id % animation.sprites.len, .sheet = sheet, .coords = animation.sprites, .z = z });
+    }
+
+    pub fn addSprite(self: *Engine, id: Id, rect: Rect, sprite: model.Sprite) !void {
+        try self.bounds.set(id, rect);
+        try self.sprites.set(id, sprite);
+    }
+
     pub fn onEvent(self: *Engine, event: *const gl.Event) void {
         switch (event.*) {
             .mouseMove => |mouseMove| {
@@ -122,6 +133,10 @@ pub const Engine = struct {
         self.viewport.onEvent(event);
     }
 
+    pub fn update(self: *Engine, ticks: u64) !void {
+        try self.updateAnimations(ticks);
+    }
+    
     pub fn updateAnimations(self: *Engine, ticks: u64) !void {
         if (self.viewport.view.height() > 5000) {
             // do not update animation when zoomed out too much
@@ -180,7 +195,7 @@ pub const Engine = struct {
             engine: *Engine,
             pub fn callback(s: *@This(), id: Id, rect: Rect) error{OutOfMemory}!void {
                 if (s.engine.sprites.find(id)) |sprite| {
-                    try s.engine.spriteRenderer.addSprite(sprite, &rect);
+                    try s.engine.spriteRenderer.addSprite(id, sprite, &rect);
                 }
             }
         } = .{ .engine = self };

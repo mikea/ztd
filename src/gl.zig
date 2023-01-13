@@ -36,7 +36,7 @@ pub fn framebufferSize(window: *c.GLFWwindow) Vec {
     var w: c.GLint = 0;
     var h: c.GLint = 0;
     c.glfwGetFramebufferSize(window, &w, &h);
-    return Vec.initInt(w, h);
+    return Vec.init(w, h);
 }
 
 pub fn init(allocator: std.mem.Allocator) !*c.GLFWwindow {

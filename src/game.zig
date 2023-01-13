@@ -74,7 +74,7 @@ pub const Game = struct {
         try self.attackers.set(id, d.attack);
         try self.engine.healths.set(id, d.health);
         try self.engine.bounds.set(id, Rect.initCentered(pos, d.size));
-        const sheet = self.resources.getSheet(d.animations.walk.sheet);
+        const sheet = self.resources.getSheet(d.sheet);
         const coords = d.animations.walk.sprites;
         const i = rnd.random().int(usize) % d.animations.walk.sprites.len;
         try self.engine.sprites.set(id, sheet.sprite(coords[i].x, coords[i].y, 0, .MONSTER));
@@ -220,8 +220,8 @@ pub const Game = struct {
             .FOLLOW => .{ .target = attacker.target },
         };
         const sheet = self.resources.getSheet(projectile.sheet);
-        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.angle });
-        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.spriteWidth, sheet.spriteHeight)));
+        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.desc.angle });
+        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.init(sheet.desc.spriteWidth, sheet.desc.spriteHeight)));
         try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
     }
 
@@ -284,7 +284,7 @@ pub const Game = struct {
                 const sheet = self.resources.getSheet(.FIREBALL_PROJECTILE);
                 const sprite = sheet.sprite(0, 0, angle, .PROJECTILE);
 
-                try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.initInt(sheet.spriteWidth, sheet.spriteHeight).scale(1.0 / 4.0)));
+                try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.init(sheet.desc.spriteWidth, sheet.desc.spriteHeight).scale(1.0 / 4.0)));
                 try self.engine.sprites.set(id, sprite);
                 try self.engine.particles.set(id, .{
                     .v = Vec.initAngle(angle).scale(radius * 1000.0 / @intToFloat(f32, duration) + rnd.random().floatNorm(f32)),
@@ -340,7 +340,7 @@ pub const Game = struct {
         const pos = bounds.center();
         const damageId = self.engine.ids.nextId();
 
-        try self.engine.bounds.set(damageId, Rect.initCentered(pos, Vec.initInt(texture.w, texture.h).scale(1)));
+        try self.engine.bounds.set(damageId, Rect.initCentered(pos, Vec.init(texture.w, texture.h).scale(1)));
         try self.engine.sprites.set(damageId, .{
             .texRect = Rect.initInt(0, 0, 1, 1),
             .angle = 0,
@@ -369,7 +369,7 @@ pub const Game = struct {
                     // const pos = bounds.center();
                     // const textId = self.engine.ids.nextId();
 
-                    // try self.engine.bounds.set(textId, Rect.centered(pos, Vec.initInt(texture.w, texture.h)));
+                    // try self.engine.bounds.set(textId, Rect.centered(pos, Vec.init(texture.w, texture.h)));
                     // try self.engine.sprites.set(textId, .{
                     //     .texture = texture.texture,
                     //     .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
@@ -414,9 +414,6 @@ pub const Game = struct {
         try self.updateDead(ticks, frameAllocator);
 
         try self.engine.updateParticles(ticks, dt);
-        try self.updateDeleted();
-
-        try self.engine.updateAnimations(ticks);
         try self.updateDeleted();
 
         if (self.monsters.size() == 0) {

@@ -13,53 +13,75 @@ pub const TowerData = struct {
 };
 
 pub const MonsterData = struct {
+    sheet: resources.SpriteSheets,
     size: Vec,
     monster: model.Monster,
     health: model.Health,
     attack: model.Attacker,
     animations: struct {
         walk: AnimationData,
+        attack: AnimationData,
     },
 };
 
 pub const AnimationData = struct {
     delay: u32,
-    sheet: resources.SpriteSheets,
     sprites: []const model.SpriteCoords,
 };
 
 pub const RedMonster = MonsterData{
     .size = .{ .x = 24, .y = 24 },
+    .sheet = resources.SpriteSheets.RED_DEMON,
     .monster = .{ .speed = 8, .price = 10 },
     .attack = .{ .range = 10, .damage = 5, .attackType = .direct, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 1000, .health = 1000 },
     .animations = .{
-        .walk = .{ .delay = 250, .sheet = resources.SpriteSheets.RED_DEMON, .sprites = &[_]model.SpriteCoords{
-            .{ .x = 2, .y = 0 },
-            .{ .x = 3, .y = 0 },
-            .{ .x = 4, .y = 0 },
-            .{ .x = 3, .y = 0 },
-        } },
+        .walk = .{ .delay = 250, .sprites = &[_]model.SpriteCoords{
+                .{ .x = 1, .y = 0 },
+                .{ .x = 2, .y = 0 },
+                .{ .x = 3, .y = 0 },
+                .{ .x = 4, .y = 0 },
+        }},
+        .attack = .{ .delay = 250, .sprites = &[_]model.SpriteCoords{
+            .{ .x = 0, .y = 4 },
+            .{ .x = 1, .y = 4 },
+            .{ .x = 2, .y = 4 },
+            .{ .x = 3, .y = 4 },
+        }},
     },
 };
 
 pub const Orc = MonsterData{
     .size = .{ .x = 16, .y = 16 },
+    .sheet = resources.SpriteSheets.ORC,
     .monster = .{ .speed = 10, .price = 1 },
     .attack = .{ .range = 16, .damage = 2, .attackType = .direct, .attackDelayMs = 1000 },
     .health = .{ .maxHealth = 100, .health = 100 },
     .animations = .{
-        .walk = .{ .delay = 150, .sheet = resources.SpriteSheets.ORC, .sprites = &[_]model.SpriteCoords{
-            .{ .x = 2, .y = 0 },
-            .{ .x = 3, .y = 0 },
-            .{ .x = 4, .y = 0 },
-            .{ .x = 3, .y = 0 },
-        } },
+        .walk = .{ 
+            .delay = 150, 
+            .sprites = &[_]model.SpriteCoords{
+                .{ .x = 1, .y = 0 },
+                .{ .x = 2, .y = 0 },
+                .{ .x = 3, .y = 0 },
+                .{ .x = 4, .y = 0 },
+            },
+         },
+        .attack = .{ 
+            .delay = 150, 
+            .sprites = &[_]model.SpriteCoords{
+                .{ .x = 0, .y = 4 },
+                .{ .x = 1, .y = 4 },
+                .{ .x = 2, .y = 4 },
+                .{ .x = 3, .y = 4 },
+            },
+         },
     },
 };
 
 pub const ArcherGoblin = MonsterData{
     .size = .{ .x = 16, .y = 16 },
+    .sheet = resources.SpriteSheets.ARCHER_GOBLIN, 
     .monster = .{ .speed = 12, .price = 1 },
     .attack = .{
         .range = 90,
@@ -74,12 +96,16 @@ pub const ArcherGoblin = MonsterData{
     },
     .health = .{ .maxHealth = 50, .health = 50 },
     .animations = .{
-        .walk = .{ .delay = 150, .sheet = resources.SpriteSheets.ARCHER_GOBLIN, .sprites = &[_]model.SpriteCoords{
+        .walk = .{ .delay = 150, .sprites = &[_]model.SpriteCoords{
+            .{ .x = 1, .y = 0 },
             .{ .x = 2, .y = 0 },
             .{ .x = 3, .y = 0 },
-            .{ .x = 4, .y = 0 },
-            .{ .x = 3, .y = 0 },
-        } },
+        }},
+        .attack = .{ .delay = 150, .sprites = &[_]model.SpriteCoords{
+            .{ .x = 0, .y = 4 },
+            .{ .x = 1, .y = 4 },
+            .{ .x = 2, .y = 4 },
+        }},
     },
 };
 

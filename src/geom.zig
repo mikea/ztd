@@ -1,15 +1,17 @@
 const std = @import("std");
 
 pub const Vec = struct {
+    pub const zero = Vec{ .x = 0, .y = 0 };
+
     x: f32,
     y: f32,
 
-    pub fn init(x: f32, y: f32) Vec {
-        return .{ .x = x, .y = y };
-    }
-
-    pub fn initInt(x: anytype, y: anytype) Vec {
-        return .{ .x = @intToFloat(f32, x), .y = @intToFloat(f32, y) };
+    // auto cast integers to float
+    pub fn init(x: anytype, y: anytype) Vec {
+        return .{
+            .x = if (@TypeOf(x) == f32) x else @intToFloat(f32, x),
+            .y = if (@TypeOf(y) == f32) y else @intToFloat(f32, y),
+        };
     }
 
     pub fn initAngle(angleRad: f32) Vec {
@@ -96,8 +98,8 @@ pub const Vec = struct {
         return .{ .x = std.math.max(self.x, v.x), .y = std.math.max(self.y, v.y) };
     }
 
-    pub fn grid(self: *const Vec, gridX: f32, gridY: f32) Vec {
-        return .{ .x = gridX * @round(self.x / gridX), .y = gridY * @round(self.y / gridY) };
+    pub fn grid(self: *const Vec, gridSize: Vec) Vec {
+        return .{ .x = gridSize.x * @round(self.x / gridSize.x), .y = gridSize.y * @round(self.y / gridSize.y) };
     }
 
     pub fn asArray(self: *const Vec) [2]f32 {

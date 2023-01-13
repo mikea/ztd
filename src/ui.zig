@@ -81,7 +81,7 @@ pub const UI = struct {
                     Mode.BUILD => {
                         if (self.game.money >= self.game.towerPrice and (try self.findTower(self.engine.mousePos) == null)) {
                             const towerSheet = self.game.resources.getSheet(self.towerPrototype.sheet);
-                            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.spriteWidth), @intToFloat(f32, towerSheet.spriteHeight));
+                            const pos = self.engine.mousePos.grid(Vec.init(towerSheet.desc.spriteWidth, towerSheet.desc.spriteHeight));
                             try self.game.addTower(pos, self.towerPrototype);
                             self.game.money -= self.game.towerPrice;
                             self.game.towerPrice = @floatToInt(usize, std.math.round(@intToFloat(f32, self.game.towerPrice) * 1.1));
@@ -241,9 +241,9 @@ pub const UI = struct {
         if (self.mode == Mode.BUILD) {
             const towerPrototype = self.towerPrototype;
             const towerSheet = self.game.resources.getSheet(towerPrototype.sheet);
-            const pos = self.engine.mousePos.grid(@intToFloat(f32, towerSheet.spriteWidth), @intToFloat(f32, towerSheet.spriteHeight));
+            const pos = self.engine.mousePos.grid(Vec.init(towerSheet.desc.spriteWidth, towerSheet.desc.spriteHeight));
             const sprite = towerSheet.sprite(towerPrototype.sprite.x, towerPrototype.sprite.y, 0, .UI);
-            try self.engine.bounds.set(self.shadowId, Rect.initCentered(pos, Vec.initInt(towerSheet.spriteWidth, towerSheet.spriteHeight)));
+            try self.engine.bounds.set(self.shadowId, Rect.initCentered(pos, Vec.init(towerSheet.desc.spriteWidth, towerSheet.desc.spriteHeight)));
             try self.engine.sprites.set(self.shadowId, sprite);
         } else {
             self.engine.bounds.delete(self.shadowId);
@@ -251,3 +251,29 @@ pub const UI = struct {
         }
     }
 };
+
+pub const Statistics = struct {
+    lastTicks: u64 = 0,
+
+    pub fn render(self: *Statistics, ticks: u64, frameAllocator: std.mem.Allocator, g: *game.Game, updateDurationNs: u64, renderDurationNs: u64) !void {
+        defer self.lastTicks = ticks;
+        if (self.lastTicks == 0 or ticks == self.lastTicks) {
+            return;
+        }
+        const text = try std.fmt.allocPrintZ(frameAllocator, "{d} fps\n{d:.0} ms/update\n{d:.0} ms/render\n{d} sprites\n{e:.1} monsters/sec", .{
+            1000 / (ticks - self.lastTicks),
+            @intToFloat(f64, updateDurationNs) / 1000000,
+            @intToFloat(f64, renderDurationNs) / 1000000,
+            g.engine.spriteRenderer.rects.items.len / 4,
+            @intToFloat(f64, g.monsters.size()) * 1000000000 / @intToFloat(f64, updateDurationNs + renderDurationNs),
+        });
+
+        const viewport = imgui.c.ImGui_GetMainViewport();
+        imgui.c.ImGui_SetNextWindowPosEx(.{ .x = viewport.*.Size.x, .y = viewport.*.Size.y}, imgui.c.ImGuiCond_Appearing, .{.x = 1, .y = 1});
+        if (imgui.c.ImGui_Begin("Statistics", null, 0)) {
+            imgui.c.ImGui_Text(text);
+        }
+        imgui.c.ImGui_End();
+    }
+};
+

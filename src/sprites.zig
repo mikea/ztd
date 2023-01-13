@@ -23,6 +23,8 @@ const SpriteSheetDescription = struct {
     spriteWidth: u16,
     spriteHeight: u16,
     angle: f32,
+    xOffset: u16 = 0,
+    yOffset: u16 = 0,
 };
 
 pub const SpriteFile = struct {
@@ -38,25 +40,22 @@ pub const SpriteBitmap = struct {
 };
 
 pub const SpriteSheet = struct {
-    offset: Vec,
-    spriteWidth: u16,
-    spriteHeight: u16,
-    angle: f32,
+    atlasOffset: Vec,
+    desc: SpriteSheetDescription,
 
     pub fn sprite(self: *const @This(), x: u16, y: u16, angle: f32, z: model.Layer) model.Sprite {
-        const origin = self.offset.add(Vec.initInt(x * self.spriteWidth, y * self.spriteHeight)).div(atlasSize);
-        const size = Vec.initInt(self.spriteWidth, self.spriteHeight).div(atlasSize);
-
-        return .{
-            .texRect = Rect.initSized(origin, size),
-            .angle = angle + self.angle,
-            .z = z,
-        };
+        const origin = self.atlasOffset
+            .add(Vec.init(x * self.desc.spriteWidth, y * self.desc.spriteHeight))
+            .add(Vec.init(self.desc.xOffset, self.desc.yOffset))
+            .div(atlasSize);
+        const size = Vec.init(self.desc.spriteWidth, self.desc.spriteHeight).div(atlasSize);
+        const texRect = Rect.initSized(origin, size);
+        return .{ .texRect = texRect, .angle = angle + self.desc.angle, .z = z };
     }
 };
 
 const atlasDim = 512;
-const atlasSize = Vec.initInt(atlasDim, atlasDim);
+const atlasSize = Vec.init(atlasDim, atlasDim);
 
 pub const Atlas = struct {
     texture: gl.c.GLuint,
@@ -134,20 +133,15 @@ pub fn loadAtlas(allocator: std.mem.Allocator, sources: []const SpriteFile) !Atl
     defer gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, 0);
     gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_S, gl.c.GL_CLAMP_TO_EDGE);
     gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_WRAP_T, gl.c.GL_CLAMP_TO_EDGE);
-    gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MIN_FILTER, gl.c.GL_NEAREST_MIPMAP_NEAREST);
-    gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MAG_FILTER, gl.c.GL_NEAREST_MIPMAP_NEAREST);
+    gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MIN_FILTER, gl.c.GL_NEAREST_MIPMAP_LINEAR);
+    gl.c.glTexParameteri(gl.c.GL_TEXTURE_2D, gl.c.GL_TEXTURE_MAG_FILTER, gl.c.GL_NEAREST);
     gl.c.glTexImage2D(gl.c.GL_TEXTURE_2D, 0, gl.c.GL_RGBA, atlasDim, atlasDim, 0, gl.c.GL_RGBA, gl.c.GL_UNSIGNED_BYTE, atlas.ptr);
     gl.c.glGenerateMipmap(gl.c.GL_TEXTURE_2D);
 
     // store individual sheet information
     var sheets = try allocator.alloc(SpriteSheet, sources.len);
     for (sheets) |_, i| {
-        sheets[i] = .{
-            .offset = Vec.initInt(rects[i].x, rects[i].y),
-            .spriteWidth = sources[i].desc.spriteWidth,
-            .spriteHeight = sources[i].desc.spriteHeight,
-            .angle = sources[i].desc.angle,
-        };
+        sheets[i] = .{ .atlasOffset = Vec.init(rects[i].x, rects[i].y), .desc = sources[i].desc };
     }
 
     return .{ .texture = texture, .sheets = sheets };
@@ -179,6 +173,9 @@ pub const BatchSpriteRenderer = struct {
     texRects: std.ArrayList([4]gl.c.GLfloat),
     texRectsBuffer: gl.c.GLuint,
 
+    angleLayer: std.ArrayList([2]gl.c.GLfloat),
+    angleLayerBuffer: gl.c.GLuint,
+
     pub fn init(allocator: std.mem.Allocator) !BatchSpriteRenderer {
         const self = .{
             .rectRenderer = rendering.RectRenderer.init(),
@@ -187,6 +184,8 @@ pub const BatchSpriteRenderer = struct {
             .rectsBuffer = gl.genBuffer(),
             .texRects = std.ArrayList([4]gl.c.GLfloat).init(allocator),
             .texRectsBuffer = gl.genBuffer(),
+            .angleLayer = std.ArrayList([2]gl.c.GLfloat).init(allocator),
+            .angleLayerBuffer = gl.genBuffer(),
         };
         return self;
     }
@@ -196,6 +195,7 @@ pub const BatchSpriteRenderer = struct {
         self.program.deinit();
         self.rects.deinit();
         self.texRects.deinit();
+        self.angleLayer.deinit();
         gl.c.glDeleteBuffers(1, &self.rectsBuffer);
     }
 
@@ -203,16 +203,20 @@ pub const BatchSpriteRenderer = struct {
         self.rectRenderer.startFrame(&self.program, viewport);
         self.rects.clearRetainingCapacity();
         self.texRects.clearRetainingCapacity();
+        self.angleLayer.clearRetainingCapacity();
     }
 
-    pub fn addSprite(self: *@This(), sprite: *const Sprite, rect: *const Rect) !void {
-        try self.rects.append([_]gl.c.GLfloat{rect.a.x, rect.a.y, rect.b.x, rect.b.y});
-        try self.texRects.append([_]gl.c.GLfloat{sprite.texRect.a.x, sprite.texRect.a.y, sprite.texRect.b.x, sprite.texRect.b.y});
+    pub fn addSprite(self: *@This(), id: model.Id, sprite: *const Sprite, rect: *const Rect) !void {
+        const z = -@intToFloat(f32, @enumToInt(sprite.z)) / @intToFloat(f32, @typeInfo(model.Layer).Enum.fields.len) +
+            @intToFloat(f32, id) / @intToFloat(f32, model.maxId) / 10;
+
+        try self.rects.append([_]gl.c.GLfloat{ rect.a.x, rect.a.y, rect.b.x, rect.b.y });
+        try self.texRects.append([_]gl.c.GLfloat{ sprite.texRect.a.x, sprite.texRect.a.y, sprite.texRect.b.x, sprite.texRect.b.y });
+        try self.angleLayer.append([_]gl.c.GLfloat{ sprite.angle, z });
     }
 
     pub fn render(self: *@This(), atlas: *Atlas) !void {
         self.program.use();
-
 
         gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, self.rectsBuffer);
         gl.c.glBufferData(gl.c.GL_ARRAY_BUFFER, @intCast(gl.c.GLsizeiptr, 4 * self.rects.items.len * @sizeOf(gl.c.GLfloat)), self.rects.items.ptr, gl.c.GL_STATIC_DRAW);
@@ -220,6 +224,10 @@ pub const BatchSpriteRenderer = struct {
 
         gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, self.texRectsBuffer);
         gl.c.glBufferData(gl.c.GL_ARRAY_BUFFER, @intCast(gl.c.GLsizeiptr, 4 * self.texRects.items.len * @sizeOf(gl.c.GLfloat)), self.texRects.items.ptr, gl.c.GL_STATIC_DRAW);
+        gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, 0);
+
+        gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, self.angleLayerBuffer);
+        gl.c.glBufferData(gl.c.GL_ARRAY_BUFFER, @intCast(gl.c.GLsizeiptr, 2 * self.angleLayer.items.len * @sizeOf(gl.c.GLfloat)), self.angleLayer.items.ptr, gl.c.GL_STATIC_DRAW);
         gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, 0);
 
         // 0
@@ -234,6 +242,11 @@ pub const BatchSpriteRenderer = struct {
         gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, 0);
 
         // 2 - angle + layer
+        gl.c.glEnableVertexAttribArray(2);
+        gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, self.angleLayerBuffer);
+        gl.c.glVertexAttribPointer(2, 2, gl.c.GL_FLOAT, gl.c.GL_FALSE, 2 * @sizeOf(gl.c.GLfloat), null);
+        gl.c.glVertexAttribDivisor(2, 1);
+        gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, 0);
 
         // 3 - texRects
         gl.c.glEnableVertexAttribArray(3);
