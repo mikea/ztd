@@ -111,7 +111,7 @@ pub const ArcherGoblin = MonsterData{
 
 pub const MagicTower = TowerData{
     .size = .{ .x = 16, .y = 16 },
-    .tower = .{ .upgradeCost = 10, .name = "magic" },
+    .tower = .{ .upgradeCost = 10, .name = "Magic" },
     .attack = .{
         .range = 100,
         .attackDelayMs = 700,
@@ -130,7 +130,7 @@ pub const MagicTower = TowerData{
 
 pub const ArcherTower = TowerData{
     .size = .{ .x = 16, .y = 16 },
-    .tower = .{ .upgradeCost = 10, .name = "archer" },
+    .tower = .{ .upgradeCost = 10, .name = "Archer" },
     .attack = .{
         .range = 100,
         .attackDelayMs = 200,
@@ -148,7 +148,7 @@ pub const Keep = TowerData{
     .size = .{ .x = 32, .y = 32 },
     .tower = .{
         .upgradeCost = 100,
-        .name = "keep",
+        .name = "Keep",
     },
     .attack = .{
         .range = 200,

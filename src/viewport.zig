@@ -66,6 +66,10 @@ pub const Viewport = struct {
         return .{ .x = (-2 * cx + s * w + 2 * v.x) / (2 * s), .y = (2 * cy + h * s - 2 * v.y) / (2 * s) };
     }
 
+    pub fn gameToScreenRect(self: *const Viewport, r: Rect) Rect {
+        return .{ .a = self.gameToScreen(r.a), .b = self.gameToScreen(r.b) };
+    }
+
     pub fn onEvent(self: *Viewport, event: *const gl.Event) void {
         const mouseZoom = 1.1;
         const kbdZoom = 1.7;

@@ -220,9 +220,9 @@ pub const Game = struct {
             .FOLLOW => .{ .target = attacker.target },
         };
         const sheet = self.resources.getSheet(projectile.sheet);
-        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.desc.angle });
-        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.init(sheet.desc.spriteWidth, sheet.desc.spriteHeight)));
+        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.init(sheet.desc.spriteWidth, sheet.desc.spriteHeight).scale(1.0/2.0)));
         try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
+        try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.desc.angle });
     }
 
     fn updateProjectiles(self: *Game, ticks: u64, dt: f32, frameAllocator: std.mem.Allocator) !void {

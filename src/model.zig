@@ -108,3 +108,10 @@ pub const Particle = struct {
     onComplete: enum { DO_NOTHING, FREE_TEXTURE },
 };
 pub const ParticlesTable = table.Table(Id, maxId, Particle);
+
+pub const Geometry = struct {
+    shape: union(enum) { circle, },
+    layer: Layer,
+    color: [4]f32,
+};
+pub const GeometriesTable = table.Table(Id, maxId, Geometry);

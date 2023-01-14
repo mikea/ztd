@@ -62,6 +62,7 @@ pub const Engine = struct {
     viewport: Viewport,
     spriteRenderer: sprites.BatchSpriteRenderer,
     healthRenderer: rendering.HealthRenderer,
+    geometryRenderer: rendering.GeometryRenderer,
 
     // tables
     // will be deleted at the end of the update
@@ -71,6 +72,7 @@ pub const Engine = struct {
     animations: AnimationsTable,
     healths: model.HealthsTable,
     particles: model.ParticlesTable,
+    geometries: model.GeometriesTable,
 
     ids: IdManager,
     running: bool = true,
@@ -84,12 +86,14 @@ pub const Engine = struct {
             .viewport = Viewport.init(window),
             .spriteRenderer = try sprites.BatchSpriteRenderer.init(allocator),
             .healthRenderer = try rendering.HealthRenderer.init(),
+            .geometryRenderer = try rendering.GeometryRenderer.init(),
             .toDelete = try SparseSet(Id, maxId, void).init(allocator),
             .bounds = try BoundsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
             .animations = try AnimationsTable.init(allocator),
             .healths = try model.HealthsTable.init(allocator),
             .particles = try model.ParticlesTable.init(allocator),
+            .geometries = try model.GeometriesTable.init(allocator),
         };
     }
 
@@ -102,6 +106,9 @@ pub const Engine = struct {
         self.toDelete.deinit();
         self.ids.deinit();
         self.spriteRenderer.deinit();
+        self.geometryRenderer.deinit();
+        self.healthRenderer.deinit();
+        self.geometries.deinit();
     }
 
     pub fn delete(self: *Engine, id: Id) !void {
@@ -110,6 +117,7 @@ pub const Engine = struct {
         self.animations.delete(id);
         self.healths.delete(id);
         self.particles.delete(id);
+        self.geometries.delete(id);
         try self.ids.free(id);
     }
 
@@ -186,6 +194,7 @@ pub const Engine = struct {
         self.viewport.update();
         try self.renderSprites();
         try self.renderHealth();
+        try self.renderGeometry();
     }
 
     fn renderSprites(self: *Engine) !void {
@@ -228,7 +237,23 @@ pub const Engine = struct {
         try self.bounds.findIntersect(self.viewport.view, @TypeOf(renderer), &renderer, @TypeOf(renderer).callback);
     }
 
-    // fn renderText(self: *Engine) !void {
+    fn renderGeometry(self: *Engine) !void {
+        self.geometryRenderer.startFrame(&self.viewport);
+
+        var renderer: struct {
+            engine: *Engine,
+
+            pub fn callback(s: *@This(), id: Id, rect: Rect) !void {
+                if (s.engine.geometries.find(id)) |geometry| {
+                    s.engine.geometryRenderer.render(rect, geometry);
+                }
+            }
+        } = .{ .engine = self };
+
+        try self.bounds.findIntersect(self.viewport.view, @TypeOf(renderer), &renderer, @TypeOf(renderer).callback);
+    }
+    
+       // fn renderText(self: *Engine) !void {
     //     var it = self.texts.iterator();
     //     while (it.next()) |entry| {
     //         var text = entry.value;

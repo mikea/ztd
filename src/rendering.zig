@@ -85,7 +85,6 @@ fn modelMat(rect: *const Rect, layer: model.Layer, angle: f32) [16]gl.c.GLfloat 
     };
 }
 
-// Renders rectangles with a given shader program.
 pub const HealthRenderer = struct {
     const Uniforms = enum { model, projection, h };
     rectRenderer: RectRenderer,
@@ -111,5 +110,33 @@ pub const HealthRenderer = struct {
         self.program.use();
         self.program.setFloat(.h, health);
         self.rectRenderer.render(&self.program, destRect, .MONSTER, 0);
+    }
+};
+
+pub const GeometryRenderer = struct {
+    const Uniforms = enum { model, projection, geomColor };
+    rectRenderer: RectRenderer,
+    program: Program(Uniforms),
+
+    pub fn init() !GeometryRenderer {
+        return .{
+            .rectRenderer = RectRenderer.init(),
+            .program = try Program(Uniforms).init("shaders/geometryVertex.glsl", "shaders/geometryFragment.glsl"),
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.rectRenderer.deinit();
+        self.program.deinit();
+    }
+
+    pub fn startFrame(self: *@This(), viewport: *Viewport) void {
+        self.rectRenderer.startFrame(&self.program, viewport);
+    }
+
+    pub fn render(self: *@This(), destRect: Rect, geometry: *const model.Geometry) void {
+        self.program.use();
+        self.program.setVec4(.geomColor, geometry.color);
+        self.rectRenderer.render(&self.program, &destRect, geometry.layer, 0);
     }
 };
