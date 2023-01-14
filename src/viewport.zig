@@ -55,6 +55,17 @@ pub const Viewport = struct {
         return self.center.add(.{ .x = s * (v.x - w / 2), .y = s * (h / 2 - v.y) });
     }
 
+    pub fn gameToScreen(self: *const Viewport, v: Vec) Vec {
+        const size = gl.framebufferSize(self.window);
+        const s = self.scale;
+        const w = size.x;
+        const h = size.y;
+        const cx = self.center.x;
+        const cy = self.center.y;
+
+        return .{ .x = (-2 * cx + s * w + 2 * v.x) / (2 * s), .y = (2 * cy + h * s - 2 * v.y) / (2 * s) };
+    }
+
     pub fn onEvent(self: *Viewport, event: *const gl.Event) void {
         const mouseZoom = 1.1;
         const kbdZoom = 1.7;

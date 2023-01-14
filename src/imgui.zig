@@ -28,6 +28,7 @@ extern fn ImGui_ImplOpenGL3_RenderDrawData(data: *c.ImDrawData) void;
 
 const Impl = struct {
     context: *c.ImGuiContext,
+    io: *c.ImGuiIO,
 
     pub fn deinit(self: *Impl) void {
         c.ImGui_DestroyContext(self.context);
@@ -43,6 +44,13 @@ const Impl = struct {
         c.ImGui_Render();
         ImGui_ImplOpenGL3_RenderDrawData(c.ImGui_GetDrawData());
     }
+
+    pub fn wantCapture(self: *Impl, event: *const gl.Event) bool {
+        switch (event.*) {
+            .mouseMove, .mouseWheel, .mouseButton => return self.io.WantCaptureMouse,
+            .keyPress =>  return self.io.WantCaptureKeyboard,
+        }
+    }
 };
 
 pub fn init(window: *gl.c.GLFWwindow) !Impl {
@@ -56,5 +64,5 @@ pub fn init(window: *gl.c.GLFWwindow) !Impl {
     try checkBool(ImGui_ImplGlfw_InitForOpenGL(window, true));
     try checkBool(ImGui_ImplOpenGL3_Init(glslVersion));
     c.ImGui_StyleColorsDark(null);
-    return .{ .context = imguiCtx };
+    return .{ .context = imguiCtx, .io = io };
 }

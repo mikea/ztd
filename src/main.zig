@@ -58,8 +58,10 @@ pub fn main() !void {
     while (c.glfwWindowShouldClose(window) == 0) {
         const ticks = @intCast(u64, std.time.milliTimestamp());
         for (gl.pollEvents()) |event| {
-            engine.onEvent(&event);
-            try game.onEvent(&event);
+            if (!imguiImpl.wantCapture(&event)) {
+                engine.onEvent(&event);
+                try game.onEvent(&event);                
+            }
         }
 
         var arena = std.heap.ArenaAllocator.init(allocator);
@@ -92,12 +94,15 @@ pub fn main() !void {
 
         try stats.render(ticks, frameAllocator, game, updateDuration, renderDuration);
 
+        // todo: move out
         const viewport = imgui.c.ImGui_GetMainViewport();
         imgui.c.ImGui_SetNextWindowPosEx(.{ .x = 0, .y = viewport.*.Size.y}, imgui.c.ImGuiCond_Appearing, .{.x = 0, .y = 1});
         if (imgui.c.ImGui_Begin("Debug", null, 0)) {
             _ = imgui.c.ImGui_Checkbox("Wireframe", &wireframe);
         }
         imgui.c.ImGui_End();
+
+        imgui.c.ImGui_ShowDemoWindow(null);
 
         imguiImpl.render();
         c.glfwSwapBuffers(window);

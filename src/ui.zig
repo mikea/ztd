@@ -111,6 +111,7 @@ pub const UI = struct {
                 self.mode = Mode.BUILD;
                 self.towerPrototype = data.BuildTowers[0];
                 self.menu.clearRetainingCapacity();
+                self.selectedTower = null;
                 for (data.BuildTowers) |tower, i| {
                     try self.menu.append(.{
                         .text = tower.tower.name,
@@ -180,8 +181,45 @@ pub const UI = struct {
 
         const text = textArray.items[0..(textArray.items.len - 1) :0];
         imgui.c.ImGui_Text(text);
-    }
 
+        if (self.selectedTower) |tower| {
+            const bounds = self.engine.bounds.get(tower.id);
+            const pos = self.engine.viewport.gameToScreen(bounds.a);
+
+            imgui.c.ImGui_SetNextWindowPosEx(.{ .x = pos.x - 16, .y = pos.y - 16 }, imgui.c.ImGuiCond_Appearing, .{ .x = 1, .y = 1 });
+
+            const title = try std.fmt.allocPrintZ(frameAllocator, "{s} Tower", .{tower.value.name});
+            if (imgui.c.ImGui_Begin(title, null, 0)) {
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Money: ${}", .{self.game.money}));
+
+                const attacker = self.game.attackers.get(tower.id);
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Damage: {}", .{@floatToInt(usize, attacker.damage)}));
+                imgui.c.ImGui_SameLineEx(200, 0);
+                imgui.c.ImGui_BeginDisabled(tower.value.upgradeCost > self.game.money);
+                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "Upgrade damage: ${}", .{tower.value.upgradeCost}))) {
+                    try self.onAction(.{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } });
+                }
+                imgui.c.ImGui_EndDisabled();
+
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Cooldown: {}", .{attacker.attackDelayMs}));
+                imgui.c.ImGui_SameLineEx(200, 0);
+                imgui.c.ImGui_BeginDisabled(tower.value.upgradeCost > self.game.money);
+                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "Upgrade rate: ${}", .{tower.value.upgradeCost}))) {
+                    try self.onAction(.{ .UPGRADE_TOWER = .{ .attribute = .RATE } });
+                }
+                imgui.c.ImGui_EndDisabled();
+
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Range: {}", .{@floatToInt(usize, attacker.range)}));
+                imgui.c.ImGui_SameLineEx(200, 0);
+                imgui.c.ImGui_BeginDisabled(tower.value.upgradeCost > self.game.money);
+                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "Upgrade range: ${}", .{tower.value.upgradeCost}))) {
+                    try self.onAction(.{ .UPGRADE_TOWER = .{ .attribute = .RANGE } });
+                }
+                imgui.c.ImGui_EndDisabled();
+            }
+            imgui.c.ImGui_End();
+        }
+    }
 
     fn printStatus(self: *@This(), writer: anytype) !void {
         try writer.print("monsters {}\n", .{self.game.monsters.size()});
@@ -190,16 +228,7 @@ pub const UI = struct {
             Mode.BUILD => {
                 try writer.print("Tower Price: $ {}\n", .{self.game.towerPrice});
             },
-            Mode.SELECT => {
-                if (self.selectedTower) |tower| {
-                    try writer.print("{s} Tower\n", .{tower.value.name});
-                    const attacker = self.game.attackers.get(tower.id);
-                    try writer.print("{} Damage\n", .{@floatToInt(usize, attacker.damage)});
-                    try writer.print("{} Cooldown\n", .{attacker.attackDelayMs});
-                    try writer.print("{} Range\n", .{@floatToInt(usize, attacker.range)});
-                    try writer.print("Upgrade Price: $ {}\n", .{tower.value.upgradeCost});
-                }
-            },
+            Mode.SELECT => {},
         }
     }
 
@@ -269,11 +298,10 @@ pub const Statistics = struct {
         });
 
         const viewport = imgui.c.ImGui_GetMainViewport();
-        imgui.c.ImGui_SetNextWindowPosEx(.{ .x = viewport.*.Size.x, .y = viewport.*.Size.y}, imgui.c.ImGuiCond_Appearing, .{.x = 1, .y = 1});
+        imgui.c.ImGui_SetNextWindowPosEx(.{ .x = viewport.*.Size.x, .y = viewport.*.Size.y }, imgui.c.ImGuiCond_Appearing, .{ .x = 1, .y = 1 });
         if (imgui.c.ImGui_Begin("Statistics", null, 0)) {
             imgui.c.ImGui_Text(text);
         }
         imgui.c.ImGui_End();
     }
 };
-
