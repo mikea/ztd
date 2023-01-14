@@ -179,40 +179,54 @@ pub const UI = struct {
         try self.printMenu(writer);
         try textArray.append(0);
 
-        const text = textArray.items[0..(textArray.items.len - 1) :0];
-        imgui.c.ImGui_Text(text);
+        if (imgui.c.ImGui_Begin("Menu", null, 0)) {
+            const text = textArray.items[0..(textArray.items.len - 1) :0];
+            imgui.c.ImGui_Text(text);
+        }
+        imgui.c.ImGui_End();
 
         if (self.selectedTower) |tower| {
             const bounds = self.engine.bounds.get(tower.id);
-            const pos = self.engine.viewport.gameToScreen(bounds.a);
+            const pos = self.engine.viewport.gameToScreen(bounds.center());
+            const posA = self.engine.viewport.gameToScreen(bounds.a);
+            const posB = self.engine.viewport.gameToScreen(bounds.b);
+            const size = (posB.x - posA.x) / 2;
 
-            imgui.c.ImGui_SetNextWindowPosEx(.{ .x = pos.x - 16, .y = pos.y - 16 }, imgui.c.ImGuiCond_Appearing, .{ .x = 1, .y = 1 });
+            imgui.c.ImGui_SetNextWindowPosEx(.{ .x = pos.x - size, .y = pos.y - size }, imgui.c.ImGuiCond_Always, .{ .x = 1, .y = 1 });
 
             const title = try std.fmt.allocPrintZ(frameAllocator, "{s} Tower", .{tower.value.name});
-            if (imgui.c.ImGui_Begin(title, null, 0)) {
+            // todo: don't render upgrade buttons when reached maximum upgrade
+            if (imgui.c.ImGui_Begin(title, null, imgui.c.ImGuiWindowFlags_NoCollapse | imgui.c.ImGuiWindowFlags_NoMove | imgui.c.ImGuiWindowFlags_NoResize)) {
                 imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Money: ${}", .{self.game.money}));
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Upgrade Cost: ${}\n ", .{tower.value.upgradeCost}));
 
                 const attacker = self.game.attackers.get(tower.id);
-                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Damage: {}", .{@floatToInt(usize, attacker.damage)}));
-                imgui.c.ImGui_SameLineEx(200, 0);
+                imgui.c.ImGui_Text("Damage:");
+                imgui.c.ImGui_SameLineEx(150, 0);
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(usize, attacker.damage)}));
+                imgui.c.ImGui_SameLineEx(220, 0);
                 imgui.c.ImGui_BeginDisabled(tower.value.upgradeCost > self.game.money);
-                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "Upgrade damage: ${}", .{tower.value.upgradeCost}))) {
+                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "upgrade##damage", .{}))) {
                     try self.onAction(.{ .UPGRADE_TOWER = .{ .attribute = .DAMAGE } });
                 }
                 imgui.c.ImGui_EndDisabled();
 
-                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Cooldown: {}", .{attacker.attackDelayMs}));
-                imgui.c.ImGui_SameLineEx(200, 0);
+                imgui.c.ImGui_Text("Cooldown:");
+                imgui.c.ImGui_SameLineEx(150, 0);
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "{}", .{attacker.attackDelayMs}));
+                imgui.c.ImGui_SameLineEx(220, 0);
                 imgui.c.ImGui_BeginDisabled(tower.value.upgradeCost > self.game.money);
-                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "Upgrade rate: ${}", .{tower.value.upgradeCost}))) {
+                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "upgrade##rate", .{}))) {
                     try self.onAction(.{ .UPGRADE_TOWER = .{ .attribute = .RATE } });
                 }
                 imgui.c.ImGui_EndDisabled();
 
-                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "Range: {}", .{@floatToInt(usize, attacker.range)}));
-                imgui.c.ImGui_SameLineEx(200, 0);
+                imgui.c.ImGui_Text("Range:");
+                imgui.c.ImGui_SameLineEx(150, 0);
+                imgui.c.ImGui_Text(try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(usize, attacker.range)}));
+                imgui.c.ImGui_SameLineEx(220, 0);
                 imgui.c.ImGui_BeginDisabled(tower.value.upgradeCost > self.game.money);
-                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "Upgrade range: ${}", .{tower.value.upgradeCost}))) {
+                if (imgui.c.ImGui_Button(try std.fmt.allocPrintZ(frameAllocator, "upgrade##range", .{}))) {
                     try self.onAction(.{ .UPGRADE_TOWER = .{ .attribute = .RANGE } });
                 }
                 imgui.c.ImGui_EndDisabled();

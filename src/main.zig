@@ -54,6 +54,7 @@ pub fn main() !void {
     var stats = ui.Statistics{};
 
     var wireframe: bool = false;
+    var showDemo: bool = false;
 
     while (c.glfwWindowShouldClose(window) == 0) {
         const ticks = @intCast(u64, std.time.milliTimestamp());
@@ -99,10 +100,12 @@ pub fn main() !void {
         imgui.c.ImGui_SetNextWindowPosEx(.{ .x = 0, .y = viewport.*.Size.y}, imgui.c.ImGuiCond_Appearing, .{.x = 0, .y = 1});
         if (imgui.c.ImGui_Begin("Debug", null, 0)) {
             _ = imgui.c.ImGui_Checkbox("Wireframe", &wireframe);
+            _ = imgui.c.ImGui_Checkbox("Show ImGui Demo", &showDemo);
+            if (showDemo) {
+                imgui.c.ImGui_ShowDemoWindow(null);
+            }
         }
         imgui.c.ImGui_End();
-
-        imgui.c.ImGui_ShowDemoWindow(null);
 
         imguiImpl.render();
         c.glfwSwapBuffers(window);
