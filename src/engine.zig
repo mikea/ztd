@@ -193,11 +193,6 @@ pub const Engine = struct {
                 try self.toDelete.set(entry.id, {});
                 switch (particle.onComplete) {
                     .DO_NOTHING => {},
-                    .FREE_TEXTURE => {
-                        // const sprite = self.sprites.get(entry.id);
-                        // gl.c.glDeleteTextures(1, &sprite.texture);
-                        @panic("not implemented");
-                    },
                 }
                 continue;
             }
@@ -279,6 +274,7 @@ pub const Engine = struct {
             var text = entry.value;
             var rect = self.bounds.get(entry.id);
             self.textRenderer.render(rect, text);
+            // self.geometryRenderer.render(rect, &.{ .shape = .rect, .layer = .UI, .color = [4]f32{0, 0, 0, 0.5} });
         }
     }
 };

@@ -56,6 +56,10 @@ pub fn Program(comptime Uniforms: type) type {
             gl.c.glUniform4fv(self.locs[@enumToInt(uniform)], 1, &vec);
         }
 
+        pub fn setInt(self: *const @This(), comptime uniform: Uniforms, i: gl.c.GLint) void {
+            gl.c.glUniform1i(self.locs[@enumToInt(uniform)], i);
+        }
+
         pub fn setFloat(self: *const @This(), comptime uniform: Uniforms, f: gl.c.GLfloat) void {
             gl.c.glUniform1f(self.locs[@enumToInt(uniform)], f);
         }

@@ -106,12 +106,12 @@ pub const Particle = struct {
     v: Vec,
     startTicks: usize,
     endTicks: usize,
-    onComplete: enum { DO_NOTHING, FREE_TEXTURE },
+    onComplete: enum { DO_NOTHING } = .DO_NOTHING,
 };
 pub const ParticleTable = table.Table(Id, maxId, Particle);
 
 pub const Geometry = struct {
-    shape: union(enum) { circle, },
+    shape: union(enum) { disk, rect },
     layer: Layer,
     color: [4]f32,
 };

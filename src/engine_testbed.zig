@@ -46,21 +46,21 @@ pub fn main() !void {
 
         const sz = @intToFloat(f32, sheet.desc.spriteHeight);
         try engine.addText(engine.ids.nextId(), Vec.init(0, 0), sz, .{
-            .str = "100",
+            .str = "100 - abc ABC gyq",
             .layer = .MONSTER,
             .color = [4]f32{ 1, 0, 0, 1 },
             .font = resources.getFont(.RUBIK),
         });
 
         try engine.addText(engine.ids.nextId(), Vec.init(0, sz * 2), sz * 2, .{
-            .str = "200",
+            .str = "200 - abc ABC gyq",
             .layer = .MONSTER,
             .color = [4]f32{ 0, 1, 0, 1 },
             .font = resources.getFont(.RUBIK),
         });
 
         try engine.addText(engine.ids.nextId(), Vec.init(0, sz * 8), sz * 4, .{
-            .str = "400",
+            .str = "400 - abc ABC gyq",
             .layer = .MONSTER,
             .color = [4]f32{ 0, 0, 1, 1 },
             .font = resources.getFont(.RUBIK),

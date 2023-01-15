@@ -5,13 +5,19 @@ out vec4 color;
 
 uniform vec4 geomColor;
 
-void main() {    
-    vec2 center = vec2(0.5, 0.5);
-    float dist = distance(center, texCoords);
+// 0 - disk
+// 1 - rect
+uniform int geomType;
 
-    // only circles are supported atm
-    if (dist > 0.5) {
-        discard;
+void main() {    
+    if (geomType == 0) {
+        vec2 center = vec2(0.5, 0.5);
+        float dist = distance(center, texCoords);
+        if (dist > 0.5) {
+            discard;
+        } else {
+            color = geomColor;
+        }
     } else {
         color = geomColor;
     }

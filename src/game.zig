@@ -338,7 +338,7 @@ pub const Game = struct {
 
         const str = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(u64, damage)});
         const damageId = self.engine.ids.nextId();
-        try self.engine.addText(damageId, pos, 30, .{
+        try self.engine.addText(damageId, pos, 8, .{
             .str = str,
             .layer = .DAMAGE,
             .color = [4]f32{ 1, 0, 0, 1 },
@@ -361,28 +361,21 @@ pub const Game = struct {
                 if (self.monsters.find(entry.id)) |monster| {
                     self.money += monster.*.price;
 
-                    const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{monster.*.price});
-                    // const texture = try sdl.renderText(self.engine.renderer, text, self.resources.rubik8, .{ .r = 255, .g = 215, .b = 0, .a = 255 });
-                    // const bounds = self.engine.bounds.get(entry.id);
-                    // const pos = bounds.center();
-                    // const textId = self.engine.ids.nextId();
-
-                    // try self.engine.bounds.set(textId, Rect.centered(pos, Vec.init(texture.w, texture.h)));
-                    // try self.engine.sprites.set(textId, .{
-                    //     .texture = texture.texture,
-                    //     .src = .{ .x = 0, .y = 0, .w = texture.w, .h = texture.h },
-                    //     .angleRad = 0,
-                    //     .z = .DAMAGE,
-                    // });
-                    // try self.engine.particles.set(textId, .{
-                    //     .startTicks = ticks,
-                    //     .v = .{ .x = 0, .y = -15 + rnd.random().floatNorm(f32) },
-                    //     .endTicks = ticks + 600,
-                    //     .onComplete = .FREE_TEXTURE,
-                    // });
-                    _ = text;
-                    _ = ticks;
-                    // @panic("not implemented");
+                    const str = try std.fmt.allocPrintZ(frameAllocator, "{}", .{monster.*.price});
+                    const bounds = self.engine.bounds.get(entry.id);
+                    const pos = bounds.center();
+                    const textId = self.engine.ids.nextId();
+                    try self.engine.addText(textId, pos, 12, .{
+                        .str = str,
+                        .layer = .DAMAGE,
+                        .color = [4]f32{ 1, 0.5, 0, 1 },
+                        .font = self.resources.getFont(.RUBIK),
+                    });
+                    try self.engine.particles.set(textId, .{
+                        .startTicks = ticks,
+                        .v = .{ .x = 0, .y = -15 + rnd.random().floatNorm(f32) },
+                        .endTicks = ticks + 600,
+                    });
                 }
             }
         }

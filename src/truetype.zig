@@ -133,6 +133,9 @@ fn scaleInt(i: c_int, s: f32) c_int {
 
 const atlasDim = 256;
 
+const firstChar = 32;
+const numChars = 120;
+
 fn buildAtlas(allocator: std.mem.Allocator, fontInfo: *c.stbtt_fontinfo, fontContent: [*c]const u8) !struct {
     texture: gl.c.GLuint,
     chars: []const c.stbtt_packedchar,
@@ -149,10 +152,8 @@ fn buildAtlas(allocator: std.mem.Allocator, fontInfo: *c.stbtt_fontinfo, fontCon
 
     var pc: c.stbtt_pack_context = undefined;
     try checkCBool(c.stbtt_PackBegin(&pc, atlas.ptr, atlasDim, atlasDim, atlas_row_size, 1, null));
-    const first_char = 32;
-    const num_chars = 120;
-    var char_data = try allocator.alloc(c.stbtt_packedchar, num_chars);
-    try checkCBool(c.stbtt_PackFontRange(&pc, fontContent, 0, scale, first_char, num_chars, char_data.ptr));
+    var char_data = try allocator.alloc(c.stbtt_packedchar, numChars);
+    try checkCBool(c.stbtt_PackFontRange(&pc, fontContent, 0, scale, firstChar, numChars, char_data.ptr));
     c.stbtt_PackEnd(&pc);
 
     if (builtin.mode == .Debug) {
@@ -205,11 +206,10 @@ pub const TextRenderer = struct {
         gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, text.font.texture);
         defer gl.c.glBindTexture(gl.c.GL_TEXTURE_2D, 0);
 
-        std.log.debug("***** {} {}", .{ destRect, scale });
         for (text.str) |ch| {
             var quad: c.stbtt_aligned_quad = undefined;
-            c.stbtt_GetPackedQuad(text.font.chars.ptr, atlasDim, atlasDim, ch, &x, &y, &quad, 1);
-            const rect = Rect.init(destRect.a.x + scale*quad.x0, destRect.a.y + scale*quad.y0, destRect.a.x + scale*quad.x1, destRect.a.y + scale*quad.y1);
+            c.stbtt_GetPackedQuad(text.font.chars.ptr, atlasDim, atlasDim, ch - firstChar, &x, &y, &quad, 1);
+            const rect = Rect.init(destRect.a.x + scale*quad.x0, destRect.b.y + scale*quad.y0, destRect.a.x + scale*quad.x1, destRect.b.y + scale*quad.y1);
             self.program.setVec4(.texRect, [4]f32{quad.s0, quad.t0, quad.s1, quad.t1});
             self.program.setVec4(.textColor, text.color);
             self.rectRenderer.render(&self.program, rect, text.layer, 0);

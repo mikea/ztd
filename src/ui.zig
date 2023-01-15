@@ -266,7 +266,7 @@ pub const UI = struct {
                     const attacker = self.game.attackers.get(towerEntry.id);
                     const range = attacker.range;
                     try self.engine.bounds.set(self.selId, Rect.initCentered(pos, Vec.init(range, range)));
-                    try self.engine.geometries.set(self.selId, .{ .shape = .{ .circle = {} }, .layer = .UI, .color = [4]f32{ 1, 0, 0, 0.15 } });
+                    try self.engine.geometries.set(self.selId, .{ .shape = .disk, .layer = .UI, .color = [4]f32{ 1, 0, 0, 0.15 } });
                     return;
                 }
             }

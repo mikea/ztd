@@ -114,7 +114,7 @@ pub const HealthRenderer = struct {
 };
 
 pub const GeometryRenderer = struct {
-    const Uniforms = enum { model, projection, geomColor };
+    const Uniforms = enum { model, projection, geomColor, geomType };
     rectRenderer: RectRenderer,
     program: Program(Uniforms),
 
@@ -137,6 +137,7 @@ pub const GeometryRenderer = struct {
     pub fn render(self: *@This(), destRect: Rect, geometry: *const model.Geometry) void {
         self.program.use();
         self.program.setVec4(.geomColor, geometry.color);
+        self.program.setInt(.geomType, @enumToInt(geometry.shape));
         self.rectRenderer.render(&self.program, destRect, geometry.layer, 0);
     }
 };
