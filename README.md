@@ -7,15 +7,17 @@ Status: Technological demo
 ## About
 
 This game was created to learn Zig and Data Oriented Design approach.
-The goal is to push performance boundaries of the number of
+To let DOD shine, the goal was to push performance boundaries of the number of
 units present in the simulation.
 
 Currently on `Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz` the engine achieves
-~25*10^6 units/sec of single-threaded performance.
+~20*10^6 units/sec of single-threaded performance.
+
+
 
 ## Runtime Requirements
 
-- Linux with following packages: `libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libcairo2-dev`
+- Linux with following packages: `libglfw3-dev`
 - Win
 
 ## Usage
@@ -28,12 +30,7 @@ Keys:
 - PgUp/PgDn, Mouse Wheel - zoom
 - B - build mode
 - ESC - exit build mode, clear selection
-- 1 - upgrade selected tower rate of fire
 - q - quit
-
-## Known Issues
-
-- Render performance suffers when zoomed out a lot
 
 ## Development
 
@@ -49,21 +46,31 @@ Commands:
 - `zig build run -Drelease-fast=true -- [<level>]`
 - `zig build -Drelease-fast=true -Dtarget=x86_64-windows`
 
+## Docker multiplatform build
+
+`./dev.sh dist`
+
 ## Code Organization
 
 Underlying data structures:
 
 - [src/geom.zig](src/geom.zig) - 2d geometry primitives
 - [src/sparse_set.zig](src/sparse_set.zig) - sparse set implementation
+- [src/denset_set.zig](src/denset_set.zig) - denset set implementation
 - [src/r_tree.zig](src/r_tree.zig) - R Tree
 - [src/table.zig](src/table.zig) - fast table of records and table of bounds
 - [src/rects.zig](src/rects.zig) - SIMD-friendly columnar []Rect
 
 Game engine:
 
-- [src/sdl.zig](src/sdl.zig) - SDL interface code
-- [src/cairo.zig](src/cairo.zig) - Cairo interface code
+- [src/gl.zig](src/gl.zig) - OpenGL interface code
+- [src/imgui.zig](src/imgui.zig) - imgui interface code
+- [src/shaders.zig](src/shaders.zig) - opengl shaders utilities
+- [src/rendering.zig](src/rendering.zig) - different shader renderers
+- [src/sprites.zig](src/sprites.zig) - sprite atlas building and rendering
+- [src/viewport.zig](src/viewport.zig) - viewport calculations and update
 - [src/engine.zig](src/engine.zig) - game engine
+- [src/engine_testbed.zig](src/engine_testbed.zig) - simple testbed to debug the engine
 
 Game:
 

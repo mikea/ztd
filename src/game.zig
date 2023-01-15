@@ -28,10 +28,10 @@ pub const Game = struct {
     lastTicks: u64 = 0,
     frame: u64 = 0,
 
-    attackers: model.AttackersTable,
-    projectiles: model.ProjectilesTable,
-    towers: model.TowersTable,
-    monsters: model.MonstersTable,
+    attackers: model.AttackerTable,
+    projectiles: model.ProjectileTable,
+    towers: model.TowerTable,
+    monsters: model.MonsterTable,
 
     ui: ui.UI = undefined,
     towersUpdated: bool = false,
@@ -43,10 +43,10 @@ pub const Game = struct {
         game.* = .{
             .engine = eng,
             .resources = res,
-            .attackers = try model.AttackersTable.init(allocator),
-            .towers = try model.TowersTable.init(allocator),
-            .monsters = try model.MonstersTable.init(allocator),
-            .projectiles = try model.ProjectilesTable.init(allocator),
+            .attackers = try model.AttackerTable.init(allocator),
+            .towers = try model.TowerTable.init(allocator),
+            .monsters = try model.MonsterTable.init(allocator),
+            .projectiles = try model.ProjectileTable.init(allocator),
         };
         game.ui = try ui.UI.init(allocator, game);
         return game;
@@ -220,7 +220,7 @@ pub const Game = struct {
             .FOLLOW => .{ .target = attacker.target },
         };
         const sheet = self.resources.getSheet(projectile.sheet);
-        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.init(sheet.desc.spriteWidth, sheet.desc.spriteHeight).scale(1.0/2.0)));
+        try self.engine.bounds.set(id, Rect.initCentered(pos, Vec.init(sheet.desc.spriteWidth, sheet.desc.spriteHeight).scale(1.0 / 2.0)));
         try self.engine.sprites.set(id, sheet.sprite(0, 0, 0, .PROJECTILE));
         try self.projectiles.set(id, .{ .damageType = projectile.damageType, .navigation = nav, .v = projectile.speed, .damage = attacker.damage, .spriteAngleRad = sheet.desc.angle });
     }
@@ -333,18 +333,16 @@ pub const Game = struct {
             health.*.futureDamage -= damage;
             std.debug.assert(health.futureDamage >= 0);
         }
-        const text = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(u64, damage)});
-        const texture = try self.resources.rubik.renderTexture(text, 8, frameAllocator);
-
         const bounds = self.engine.bounds.get(id);
         const pos = bounds.center();
-        const damageId = self.engine.ids.nextId();
 
-        try self.engine.bounds.set(damageId, Rect.initCentered(pos, Vec.init(texture.w, texture.h).scale(1)));
-        try self.engine.sprites.set(damageId, .{
-            .texRect = Rect.initInt(0, 0, 1, 1),
-            .angle = 0,
-            .z = .DAMAGE,
+        const str = try std.fmt.allocPrintZ(frameAllocator, "{}", .{@floatToInt(u64, damage)});
+        const damageId = self.engine.ids.nextId();
+        try self.engine.addText(damageId, pos, 30, .{
+            .str = str,
+            .layer = .DAMAGE,
+            .color = [4]f32{ 1, 0, 0, 1 },
+            .font = self.resources.getFont(.RUBIK),
         });
         try self.engine.particles.set(damageId, .{
             .startTicks = ticks,

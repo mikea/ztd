@@ -3,16 +3,15 @@ const table = @import("table.zig");
 const sprites = @import("sprites.zig");
 const model = @import("model.zig");
 const data = @import("data.zig");
-const Id = model.Id;
-const maxId = model.maxId;
-
+const truetype = @import("truetype.zig");
 const gl = @import("gl.zig");
 const rendering = @import("rendering.zig");
-
 const geom = @import("geom.zig");
+
+const Id = model.Id;
+const maxId = model.maxId;
 const Vec = geom.Vec;
 const Rect = geom.Rect;
-
 const SparseSet = @import("sparse_set.zig").SparseSet;
 const Viewport = @import("viewport.zig").Viewport;
 
@@ -56,6 +55,7 @@ pub const Engine = struct {
     const SpritesTable = table.Table(Id, maxId, model.Sprite);
     const AnimationsTable = table.Table(Id, maxId, model.Animation);
 
+    allocator: std.mem.Allocator,
     window: *gl.c.GLFWwindow,
     atlas: *sprites.Atlas,
 
@@ -63,6 +63,7 @@ pub const Engine = struct {
     spriteRenderer: sprites.BatchSpriteRenderer,
     healthRenderer: rendering.HealthRenderer,
     geometryRenderer: rendering.GeometryRenderer,
+    textRenderer: truetype.TextRenderer,
 
     // tables
     // will be deleted at the end of the update
@@ -70,9 +71,10 @@ pub const Engine = struct {
     bounds: BoundsTable,
     sprites: SpritesTable,
     animations: AnimationsTable,
-    healths: model.HealthsTable,
-    particles: model.ParticlesTable,
-    geometries: model.GeometriesTable,
+    healths: model.HealthTable,
+    particles: model.ParticleTable,
+    geometries: model.GeometryTable,
+    texts: model.TextTable,
 
     ids: IdManager,
     running: bool = true,
@@ -80,6 +82,7 @@ pub const Engine = struct {
 
     pub fn init(allocator: std.mem.Allocator, window: *gl.c.GLFWwindow, atlas: *sprites.Atlas) !Engine {
         return .{
+            .allocator = allocator,
             .window = window,
             .atlas = atlas,
             .ids = try IdManager.init(allocator),
@@ -87,13 +90,15 @@ pub const Engine = struct {
             .spriteRenderer = try sprites.BatchSpriteRenderer.init(allocator),
             .healthRenderer = try rendering.HealthRenderer.init(),
             .geometryRenderer = try rendering.GeometryRenderer.init(),
+            .textRenderer = try truetype.TextRenderer.init(),
             .toDelete = try SparseSet(Id, maxId, void).init(allocator),
             .bounds = try BoundsTable.init(allocator),
             .sprites = try SpritesTable.init(allocator),
             .animations = try AnimationsTable.init(allocator),
-            .healths = try model.HealthsTable.init(allocator),
-            .particles = try model.ParticlesTable.init(allocator),
-            .geometries = try model.GeometriesTable.init(allocator),
+            .healths = try model.HealthTable.init(allocator),
+            .particles = try model.ParticleTable.init(allocator),
+            .geometries = try model.GeometryTable.init(allocator),
+            .texts = try model.TextTable.init(allocator),
         };
     }
 
@@ -109,6 +114,7 @@ pub const Engine = struct {
         self.geometryRenderer.deinit();
         self.healthRenderer.deinit();
         self.geometries.deinit();
+        self.texts.deinit();
     }
 
     pub fn delete(self: *Engine, id: Id) !void {
@@ -119,6 +125,9 @@ pub const Engine = struct {
         self.particles.delete(id);
         self.geometries.delete(id);
         try self.ids.free(id);
+        if (self.texts.getDelete(id)) |text| {
+            self.allocator.free(text.str);
+        }
     }
 
     pub fn addAnimation(self: *Engine, id: Id, rect: Rect, sheet: *const sprites.SpriteSheet, animation: *const data.AnimationData, z: model.Layer) !void {
@@ -129,6 +138,16 @@ pub const Engine = struct {
     pub fn addSprite(self: *Engine, id: Id, rect: Rect, sprite: model.Sprite) !void {
         try self.bounds.set(id, rect);
         try self.sprites.set(id, sprite);
+    }
+
+    pub fn addText(self: *Engine, id: Id, pos: Vec, height: f32, text: model.Text) !void {
+        const rect = Rect.initSized(pos, text.font.bounds(text.str, height));
+        try self.bounds.set(id, rect);
+        var strCopy = try self.allocator.alloc(u8, text.str.len);
+        std.mem.copy(u8, strCopy, text.str);
+        var copy = text;
+        copy.str = strCopy;
+        try self.texts.set(id, copy);
     }
 
     pub fn onEvent(self: *Engine, event: *const gl.Event) void {
@@ -195,6 +214,7 @@ pub const Engine = struct {
         try self.renderSprites();
         try self.renderHealth();
         try self.renderGeometry();
+        try self.renderText();
     }
 
     fn renderSprites(self: *Engine) !void {
@@ -228,7 +248,7 @@ pub const Engine = struct {
                             .a = .{ .x = rect.a.x, .y = rect.a.y - 1 },
                             .b = .{ .x = rect.b.x, .y = rect.a.y },
                         };
-                        s.engine.healthRenderer.renderHealth(healthRatio, &healthRect);
+                        s.engine.healthRenderer.renderHealth(healthRect, healthRatio);
                     }
                 }
             }
@@ -240,9 +260,8 @@ pub const Engine = struct {
     fn renderGeometry(self: *Engine) !void {
         self.geometryRenderer.startFrame(&self.viewport);
 
-        var renderer: struct {
+        var processor: struct {
             engine: *Engine,
-
             pub fn callback(s: *@This(), id: Id, rect: Rect) !void {
                 if (s.engine.geometries.find(id)) |geometry| {
                     s.engine.geometryRenderer.render(rect, geometry);
@@ -250,47 +269,16 @@ pub const Engine = struct {
             }
         } = .{ .engine = self };
 
-        try self.bounds.findIntersect(self.viewport.view, @TypeOf(renderer), &renderer, @TypeOf(renderer).callback);
+        try self.bounds.findIntersect(self.viewport.view, @TypeOf(processor), &processor, @TypeOf(processor).callback);
     }
     
-       // fn renderText(self: *Engine) !void {
-    //     var it = self.texts.iterator();
-    //     while (it.next()) |entry| {
-    //         var text = entry.value;
-
-    //         if (text.texture == null) {
-    //             text.texture = checkNotNull(sdl.c.SDL_Texture, sdl.c.SDL_CreateTextureFromSurface(self.renderer, text.surface));
-    //         }
-
-    //         const srcRect: sdl.c.SDL_Rect = .{
-    //             .x = 0,
-    //             .y = 0,
-    //             .w = text.surface.*.w,
-    //             .h = text.surface.*.h,
-    //         };
-    //         const dstRect: sdl.c.SDL_Rect = .{
-    //             .x = @floatToInt(i32, text.pos.x),
-    //             .y = @floatToInt(i32, text.pos.y),
-    //             .w = text.surface.*.w,
-    //             .h = text.surface.*.h,
-    //         };
-
-    //         checkInt(sdl.c.SDL_RenderCopy(self.renderer, text.texture, &srcRect, &dstRect));
-    //     }
-    // }
-
-    // pub fn setText(self: *Engine, id: Id, text: [:0]const u8, pos: Vec, alignment: Alignment, color: sdl.c.SDL_Color, font: *sdl.c.TTF_Font) !void {
-    //     if (self.texts.find(id)) |t| {
-    //         t.destroy();
-    //     }
-
-    //     const surface = sdl.c.TTF_RenderText_Solid_Wrapped(font, @as([*:0]const u8, text), color, 0);
-    //     const w = @intToFloat(f32, surface.*.w);
-    //     const alignedPos = switch (alignment) {
-    //         Alignment.LEFT => pos,
-    //         Alignment.CENTER => pos.minus(.{ .x = w / 2, .y = 0 }),
-    //         Alignment.RIGHT => pos.minus(.{ .x = w, .y = 0 }),
-    //     };
-    //     try self.texts.set(id, .{ .surface = surface, .pos = alignedPos, .alignment = alignment, .texture = null });
-    // }
+    fn renderText(self: *Engine) !void {
+        self.textRenderer.startFrame(&self.viewport);
+        var it = self.texts.iterator();
+        while (it.next()) |entry| {
+            var text = entry.value;
+            var rect = self.bounds.get(entry.id);
+            self.textRenderer.render(rect, text);
+        }
+    }
 };

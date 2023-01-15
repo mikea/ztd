@@ -20,6 +20,10 @@ pub const SpriteSheets = enum {
     FLAME_PARTICLE,
 };
 
+pub const Fonts = enum {
+    RUBIK,
+};
+
 pub const Resources = struct {
     const sheetSize = @typeInfo(SpriteSheets).Enum.fields.len;
 
@@ -34,16 +38,22 @@ pub const Resources = struct {
         
         return .{
             .atlas = try sprites.loadAtlas(allocator, &files),
-            .rubik = try truetype.FontInfo.init(@embedFile("res/RubikMonoOne-Regular.ttf")),
+            .rubik = try truetype.FontInfo.init(allocator, @embedFile("res/RubikMonoOne-Regular.ttf")),
         };
     }
 
     pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         self.atlas.deinit(allocator);
+        self.rubik.deinit(allocator);
     }
 
     pub fn getSheet(self: *@This(), sheet: SpriteSheets) *const sprites.SpriteSheet {
         return &self.atlas.sheets[@enumToInt(sheet)];
+    }
+
+    pub fn getFont(self: *const @This(), font: Fonts) *const truetype.FontInfo {
+        std.debug.assert(font == .RUBIK);
+        return &self.rubik;
     }
 };
 

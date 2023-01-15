@@ -55,7 +55,7 @@ pub const RectRenderer = struct {
         program.setMatrix4(.projection, viewport.mat);
     }
 
-    pub fn render(self: *@This(), program: anytype, destRect: *const Rect, layer: model.Layer, angle: f32) void {
+    pub fn render(self: *@This(), program: anytype, destRect: Rect, layer: model.Layer, angle: f32) void {
         program.use();
         program.setMatrix4(.model, modelMat(destRect, layer, angle));
 
@@ -65,7 +65,7 @@ pub const RectRenderer = struct {
     }
 };
 
-fn modelMat(rect: *const Rect, layer: model.Layer, angle: f32) [16]gl.c.GLfloat {
+pub fn modelMat(rect: Rect, layer: model.Layer, angle: f32) [16]gl.c.GLfloat {
     const l = rect.a.x;
     const b = rect.a.y;
     const w = rect.b.x - l;
@@ -106,7 +106,7 @@ pub const HealthRenderer = struct {
         self.rectRenderer.startFrame(&self.program, viewport);
     }
 
-    pub fn renderHealth(self: *@This(), health: f32, destRect: *const Rect) void {
+    pub fn renderHealth(self: *@This(), destRect: Rect, health: f32) void {
         self.program.use();
         self.program.setFloat(.h, health);
         self.rectRenderer.render(&self.program, destRect, .MONSTER, 0);
@@ -137,6 +137,6 @@ pub const GeometryRenderer = struct {
     pub fn render(self: *@This(), destRect: Rect, geometry: *const model.Geometry) void {
         self.program.use();
         self.program.setVec4(.geomColor, geometry.color);
-        self.rectRenderer.render(&self.program, &destRect, geometry.layer, 0);
+        self.rectRenderer.render(&self.program, destRect, geometry.layer, 0);
     }
 };

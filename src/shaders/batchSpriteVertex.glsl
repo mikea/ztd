@@ -8,9 +8,6 @@ out vec2 texCoords;
 
 uniform mat4 projection;
 
-// uniform vec2 texScale;
-// uniform vec2 texOffset;
-
 void main()
 {
     float z = angleLayer.y;

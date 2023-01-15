@@ -43,6 +43,28 @@ pub fn main() !void {
         const sheet = resources.getSheet(d.sheet);
         try engine.addAnimation(engine.ids.nextId(), Rect.initCentered(Vec.init(0, 0), d.size), sheet, &d.animations.walk, .MONSTER);
         try engine.addAnimation(engine.ids.nextId(), Rect.initCentered(Vec.init(0, sheet.desc.spriteHeight * 2), d.size), sheet, &d.animations.attack, .MONSTER);
+
+        const sz = @intToFloat(f32, sheet.desc.spriteHeight);
+        try engine.addText(engine.ids.nextId(), Vec.init(0, 0), sz, .{
+            .str = "100",
+            .layer = .MONSTER,
+            .color = [4]f32{ 1, 0, 0, 1 },
+            .font = resources.getFont(.RUBIK),
+        });
+
+        try engine.addText(engine.ids.nextId(), Vec.init(0, sz * 2), sz * 2, .{
+            .str = "200",
+            .layer = .MONSTER,
+            .color = [4]f32{ 0, 1, 0, 1 },
+            .font = resources.getFont(.RUBIK),
+        });
+
+        try engine.addText(engine.ids.nextId(), Vec.init(0, sz * 8), sz * 4, .{
+            .str = "400",
+            .layer = .MONSTER,
+            .color = [4]f32{ 0, 0, 1, 1 },
+            .font = resources.getFont(.RUBIK),
+        });
     }
 
     while (c.glfwWindowShouldClose(window) == 0) {
@@ -53,7 +75,7 @@ pub fn main() !void {
             if (event == .keyPress) {
                 if (event.keyPress.key == gl.c.GLFW_KEY_Q) {
                     std.c.exit(0);
-                } 
+                }
             }
         }
 

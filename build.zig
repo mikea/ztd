@@ -27,38 +27,21 @@ pub fn build(b: *std.build.Builder) void {
     exe.linkLibCpp();
 
     exe.addCSourceFile("lib/stb/stb.c", &cflags);
+    exe.addIncludePath("lib/");
+    exe.addIncludePath("lib/imgui-1.89.1/");
 
     if (target.os_tag == std.Target.Os.Tag.windows) {
-        // these are docker paths
-        const sdl_path = "/win/SDL2/";
-        exe.addIncludePath(sdl_path ++ "include");
-        exe.addLibraryPath(sdl_path ++ "lib/x64/");
-        b.installBinFile(sdl_path ++ "lib/x64/SDL2.dll", "SDL2.dll");
-        exe.linkSystemLibraryName("SDL2");
+        // Docker container paths
+        exe.addIncludePath("/win/glfw/include");
+        exe.addLibraryPath("/win/glfw/lib-vc2019");
+        b.installBinFile("/win/glfw/lib-vc2019/glfw3.dll", "glfw3.dll");
+        exe.linkSystemLibraryName("glfw3dll");
 
-        const sdl_ttf_path = "/win/SDL2_ttf/";
-        exe.addIncludePath(sdl_ttf_path ++ "include");
-        exe.addLibraryPath(sdl_ttf_path ++ "lib/x64/");
-        b.installBinFile(sdl_ttf_path ++ "lib/x64/SDL2_ttf.dll", "SDL2_ttf.dll");
-        exe.linkSystemLibraryName("SDL2_ttf");
-
-        const sdl_image_path = "/win/SDL2_image/";
-        exe.addIncludePath(sdl_image_path ++ "include");
-        exe.addLibraryPath(sdl_image_path ++ "lib/x64/");
-        b.installBinFile(sdl_image_path ++ "lib/x64/SDL2_image.dll", "SDL2_image.dll");
-        exe.linkSystemLibraryName("SDL2_image");
-
-        const cairo_path = "/win/cairo/";
-        exe.addIncludePath(cairo_path ++ "include");
-        exe.addLibraryPath(cairo_path ++ "lib/x64/");
-        b.installBinFile(cairo_path ++ "lib/x64/cairo.dll", "cairo.dll");
-        exe.linkSystemLibraryName("cairo");
     } else if (target.os_tag == std.Target.Os.Tag.macos) {
+        // Docker container paths
         exe.addIncludePath("/mac/includes");
-        exe.addIncludePath("/mac/includes/SDL2");
+        exe.addIncludePath("/mac/glfw/include");
     } else {
-        exe.addIncludePath("lib/");
-        exe.addIncludePath("lib/imgui-1.89.1/");
         exe.linkSystemLibraryName("glfw");
     }
 

@@ -127,6 +127,28 @@ pub fn SparseSet(
             self.ids.items[denseIdx] = lastId;
             self.sparse[lastId] = self.sparse[i];
         }
+        
+        pub fn getDelete(self: *@This(), i: I) ?T {
+            if (self.find(i) == null) {
+                return null;
+            }
+
+            const denseIdx = self.sparse[i];
+            const oldValue = self.values.items[denseIdx];
+            const n = self.size();
+
+            const lastValue = self.values.pop();
+            const lastId = self.ids.pop();
+
+            if (denseIdx == n - 1) {
+                return oldValue;
+            }
+
+            self.values.items[denseIdx] = lastValue;
+            self.ids.items[denseIdx] = lastId;
+            self.sparse[lastId] = self.sparse[i];
+            return oldValue;
+        }
 
         pub fn pop(self: *@This()) I {
             self.values.pop();

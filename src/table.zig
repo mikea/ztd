@@ -46,6 +46,10 @@ pub fn Table(comptime Id: type, comptime maxId: Id, comptime T: type) type {
             return self.sparse.delete(id);
         }
 
+        pub fn getDelete(self: *@This(), id: Id) ?T {
+            return self.sparse.getDelete(id);
+        }
+
         pub fn size(self: *const @This()) usize {
             return self.sparse.size();
         }

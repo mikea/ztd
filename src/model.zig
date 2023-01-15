@@ -4,6 +4,7 @@ const gl = @import("gl.zig");
 const sprites = @import("sprites.zig");
 const Vec = @import("geom.zig").Vec;
 const Rect = @import("geom.zig").Rect;
+const truetype = @import("truetype.zig");
 
 pub const Id = u32;
 pub const maxId: usize = 1 << 19;
@@ -19,19 +20,19 @@ pub const Health = struct {
     // damage that projectile will make when hit
     futureDamage: f32 = 0,
 };
-pub const HealthsTable = table.Table(Id, maxId, Health);
+pub const HealthTable = table.Table(Id, maxId, Health);
 
 pub const Tower = struct {
     name: []const u8,
     upgradeCost: usize,
 };
-pub const TowersTable = table.Table(Id, maxId, Tower);
+pub const TowerTable = table.Table(Id, maxId, Tower);
 
 pub const Monster = struct {
     speed: f32,
     price: usize,
 };
-pub const MonstersTable = table.Table(Id, maxId, Monster);
+pub const MonsterTable = table.Table(Id, maxId, Monster);
 
 pub const DamageType = union(enum) {
     direct: void,
@@ -63,7 +64,7 @@ pub const Attacker = struct {
     lastAttack: u64 = 0,
     target: Id = 0, // pointer to Health record
 };
-pub const AttackersTable = table.Table(Id, maxId, Attacker);
+pub const AttackerTable = table.Table(Id, maxId, Attacker);
 
 pub const SpriteCoords = struct { x: u8, y: u8 };
 
@@ -89,7 +90,7 @@ pub const Projectile = struct {
     // sprite initial angle
     spriteAngleRad: f32,
 };
-pub const ProjectilesTable = table.Table(Id, maxId, Projectile);
+pub const ProjectileTable = table.Table(Id, maxId, Projectile);
 
 pub const Layer = enum {
     SPLASH_DAMAGE,
@@ -107,11 +108,19 @@ pub const Particle = struct {
     endTicks: usize,
     onComplete: enum { DO_NOTHING, FREE_TEXTURE },
 };
-pub const ParticlesTable = table.Table(Id, maxId, Particle);
+pub const ParticleTable = table.Table(Id, maxId, Particle);
 
 pub const Geometry = struct {
     shape: union(enum) { circle, },
     layer: Layer,
     color: [4]f32,
 };
-pub const GeometriesTable = table.Table(Id, maxId, Geometry);
+pub const GeometryTable = table.Table(Id, maxId, Geometry);
+
+pub const Text = struct {
+    str: []const u8,
+    layer: Layer,
+    color: [4]f32,
+    font: *const truetype.FontInfo,
+};
+pub const TextTable = table.Table(Id, maxId, Text);

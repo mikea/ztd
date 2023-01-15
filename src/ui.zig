@@ -43,7 +43,7 @@ pub const UI = struct {
     shadowId: Id,
     selId: Id,
 
-    selectedTower: ?model.TowersTable.Entry = null,
+    selectedTower: ?model.TowerTable.Entry = null,
     towerPrototype: *const data.TowerData,
 
     pub fn init(allocator: std.mem.Allocator, g: *game.Game) !@This() {
@@ -148,10 +148,10 @@ pub const UI = struct {
         }
     }
 
-    fn findTower(self: *@This(), pos: Vec) !?model.TowersTable.Entry {
+    fn findTower(self: *@This(), pos: Vec) !?model.TowerTable.Entry {
         var towerFinder: struct {
-            towers: *model.TowersTable,
-            tower: ?model.TowersTable.Entry = null,
+            towers: *model.TowerTable,
+            tower: ?model.TowerTable.Entry = null,
 
             pub fn callback(s: *@This(), id: Id, _: Rect) error{OutOfMemory}!void {
                 if (s.towers.findEntry(id)) |entry| {

@@ -68,6 +68,7 @@ pub const Atlas = struct {
 };
 
 pub fn loadAtlas(allocator: std.mem.Allocator, sources: []const SpriteFile) !Atlas {
+    try std.io.getStdOut().writer().print("building sprites atlas...", .{});
     // load bitmaps
     const bitmaps = try loadBitmaps(allocator, sources);
     defer {
@@ -143,6 +144,7 @@ pub fn loadAtlas(allocator: std.mem.Allocator, sources: []const SpriteFile) !Atl
     for (sheets) |_, i| {
         sheets[i] = .{ .atlasOffset = Vec.init(rects[i].x, rects[i].y), .desc = sources[i].desc };
     }
+    try std.io.getStdOut().writer().print("done.\n", .{});
 
     return .{ .texture = texture, .sheets = sheets };
 }
