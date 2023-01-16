@@ -163,3 +163,37 @@ pub fn initStress1(game: *Game) !void {
     tower.size = tower.size.scale(2);
     try game.addTower(.{ .x = 0, .y = 0 }, &tower);
 }
+
+
+
+pub fn initStress2(game: *Game) !void {
+    {
+        var monster = data.Orc;
+        monster.monster.speed = 100;
+
+        // monsters
+        const dist: f32 = 30;
+        const size: usize = 1000;
+
+        var i: usize = 0;
+        while (i < size) {
+            var j: usize = 0;
+            while (j < size) {
+                try game.addMonster(.{
+                    .x = @intToFloat(f32, i) * dist + 200 + 5 * rnd.random().floatNorm(f32),
+                    .y = @intToFloat(f32, j) * dist + 200 + 5 * rnd.random().floatNorm(f32),
+                }, &monster);
+                j += 1;
+            }
+
+            i += 1;
+        }
+    }
+
+    var tower = data.MagicTower;
+    tower.attack.damage = data.Orc.health.maxHealth;
+    tower.attack.attackDelayMs = 25;
+    tower.attack.attackType.projectile.speed = 500;
+    tower.size = tower.size.scale(2);
+    try game.addTower(.{ .x = 0, .y = 0 }, &tower);
+}

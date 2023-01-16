@@ -40,6 +40,8 @@ pub fn main() !void {
     if (args.len >= 2) {
         if (std.mem.eql(u8, args[1], "stress1")) {
             try levels.initStress1(game);
+        } else if (std.mem.eql(u8, args[1], "stress2")) {
+            try levels.initStress2(game);
         } else if (std.mem.eql(u8, args[1], "level2")) {
             try levels.initLevel2(game);
         } else if (std.mem.eql(u8, args[1], "level3")) {

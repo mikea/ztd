@@ -7,7 +7,7 @@ const Rect = @import("geom.zig").Rect;
 const truetype = @import("truetype.zig");
 
 pub const Id = u32;
-pub const maxId: usize = 1 << 19;
+pub const maxId: usize = 1 << 20;
 
 // row types definitions
 
