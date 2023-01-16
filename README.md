@@ -86,3 +86,7 @@ Game:
 - code in `lib/` is licensed under respective original licenses.
 - [mini world sprites](https://opengameart.org/content/miniworld-sprites) are licensed under CC0
 - [rubik font](https://fonts.google.com/specimen/Rubik/about) is licensed under Open Font License
+
+## Screenshot
+
+<img src="docs/Screenshot from 2023-01-16 10-16-28.png" width="200" />
