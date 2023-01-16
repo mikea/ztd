@@ -6,19 +6,18 @@ Status: Technological demo
 
 ## About
 
-This game was created to learn Zig and Data Oriented Design approach.
-To let DOD shine, the goal was to push performance boundaries of the number of
+This game was written by me during fall 2022 holidays to learn Zig and Data Oriented Design approach.
+It contains a highly optimized 2D sprite engine with custom OpenGL-based renderer.
+
+To let the DOD shine, this project's goal was to push performance boundaries of the number of
 units present in the simulation.
-
-Currently on `Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz` the engine achieves
-~20*10^6 units/sec of single-threaded performance.
-
-
+Currently on `Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz` the engine achieves up to
+10*10^6 units/sec of single-threaded performance.
 
 ## Runtime Requirements
 
 - Linux with following packages: `libglfw3-dev`
-- Win
+- Windows 64
 
 ## Usage
 
@@ -36,19 +35,18 @@ Keys:
 
 Requirements:
 
+- linux, `libglfw3-dev` package
 - Zig 0.11 (I use [zigup](https://github.com/marler8997/zigup) to fetch master version)
-- devel versions of packages
 
 Commands:
 
 - `zig build`
 - `zig build run`
 - `zig build run -Drelease-fast=true -- [<level>]`
-- `zig build -Drelease-fast=true -Dtarget=x86_64-windows`
 
 ## Docker multiplatform build
 
-`./dev.sh dist`
+`./dev.sh dist` will build linux and win64 release .zip archives.
 
 ## Code Organization
 
@@ -81,3 +79,10 @@ Game:
 - [src/ui.zig](src/ui.zig) - game UI and user interaction
 - [src/data.zig](src/data.zig) - units and buildings data (hp, damage, etc)
 - [src/main.zig](src/main.zig) - main entry poitn and game loop
+
+## License
+
+- code in `src/` is licensed under GPL3.
+- code in `lib/` is licensed under respective original licenses.
+- [mini world sprites](https://opengameart.org/content/miniworld-sprites) are licensed under CC0
+- [rubik font](https://fonts.google.com/specimen/Rubik/about) is licensed under Open Font License
