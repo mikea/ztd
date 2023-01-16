@@ -89,4 +89,4 @@ Game:
 
 ## Screenshot
 
-<img src="docs/Screenshot from 2023-01-16 10-16-28.png" width="200" />
+<img src="docs/Screenshot from 2023-01-16 10-16-28.png" width="400" />
